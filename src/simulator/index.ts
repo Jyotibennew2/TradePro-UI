@@ -1,5 +1,5 @@
 /**
- * TradePro Simulator - Public API
+ * TradePro Simulator - Public API v2
  * Single entry point for all simulator exports.
  */
 
@@ -10,13 +10,12 @@ export * from "./models/Strategy";
 export * from "./models/Payoff";
 export * from "./models/Margin";
 
-// Pricing
-export * from "./pricing/BlackScholes";
-export * from "./pricing/PayoffEngine";
-export * from "./pricing/MarginEngine";
+// Pricing (full module)
+export * from "./pricing/index";
 
 // State
 export * from "./state/simulatorStore";
 
 // Services
 export * from "./services/strategyBuilder";
+export * from "./services/strategyStorage";
