@@ -1,0 +1,36 @@
+import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { fetchHealth, fetchQuotes } from "../utils/api";
+import { useAppStore } from "../store";
+
+export function useHealth() {
+  const { setLive, setMock } = useAppStore();
+  return useQuery({
+    queryKey    : ["health"],
+    queryFn     : fetchHealth,
+    refetchInterval: 10_000,
+    onSuccess   : (d) => {
+      setLive(!d.mock_mode);
+      setMock(d.mock_mode);
+    },
+  });
+}
+
+export function useQuotes() {
+  const { setNifty, setBankNifty } = useAppStore();
+  const query = useQuery({
+    queryKey       : ["quotes"],
+    queryFn        : fetchQuotes,
+    refetchInterval: 3_000,
+  });
+
+  useEffect(() => {
+    if (query.data?.success) {
+      const d = query.data.data;
+      setNifty(d["NSE:NIFTY50-INDEX"]?.ltp     ?? 0);
+      setBankNifty(d["NSE:NIFTYBANK-INDEX"]?.ltp ?? 0);
+    }
+  }, [query.data]);
+
+  return query;
+}
