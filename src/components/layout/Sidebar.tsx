@@ -7,16 +7,18 @@ import {
   ClipboardList,
   PieChart,
   Settings,
+  BarChart2,
 } from "lucide-react";
 
 const NAV = [
-  { to: "/",         icon: LayoutDashboard, label: "Dashboard"  },
-  { to: "/chain",    icon: GitBranch,       label: "Option Chain"},
-  { to: "/scanner",  icon: Radar,           label: "Scanner"    },
-  { to: "/strategy", icon: Lightbulb,       label: "Strategy"   },
-  { to: "/paper",    icon: ClipboardList,   label: "Paper Trade"},
-  { to: "/portfolio",icon: PieChart,        label: "Portfolio"  },
-  { to: "/settings", icon: Settings,        label: "Settings"   },
+  { to: "/",          icon: LayoutDashboard, label: "Dashboard"  },
+  { to: "/chain",     icon: GitBranch,       label: "Option Chain"},
+  { to: "/scanner",   icon: Radar,           label: "Scanner"    },
+  { to: "/strategy",  icon: Lightbulb,       label: "Strategy"   },
+  { to: "/paper",     icon: ClipboardList,   label: "Paper Trade"},
+  { to: "/portfolio", icon: PieChart,        label: "Portfolio"  },
+  { to: "/simulator", icon: BarChart2,       label: "Simulator"  },
+  { to: "/settings",  icon: Settings,        label: "Settings"   },
 ];
 
 export default function Sidebar() {
@@ -32,8 +34,8 @@ export default function Sidebar() {
             }`
           }
           style={({ isActive }) => ({
-            color    : isActive ? "#00c8f0" : "#445566",
-            border   : isActive ? "1px solid #00c8f030" : "1px solid transparent",
+            color : isActive ? "#00c8f0" : "#445566",
+            border: isActive ? "1px solid #00c8f030" : "1px solid transparent",
           })}
         >
           <Icon size={18} />

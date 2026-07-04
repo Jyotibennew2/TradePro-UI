@@ -20,7 +20,7 @@ export function useQuotes() {
   const { setNifty, setBankNifty } = useAppStore();
   const query = useQuery({
     queryKey       : ["quotes"],
-    queryFn        : fetchQuotes,
+    queryFn        : () => fetchQuotes("NSE:NIFTY50-INDEX,NSE:NIFTYBANK-INDEX,NSE:NIFTYMID100-INDEX"),
     refetchInterval: 3_000,
   });
 

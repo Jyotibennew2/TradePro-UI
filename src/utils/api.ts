@@ -32,7 +32,7 @@ export const fetchHealth = () =>
   get<HealthResponse>("/health");
 
 // ─── Quotes ──────────────────────────────────────────────────────────────────
-export const fetchQuotes = (symbols = "NSE:NIFTY50-INDEX,NSE:NIFTYBANK-INDEX,NSE:NIFTYMID100-INDEX") =>
+export const fetchQuotes = (symbols: string = "NSE:NIFTY50-INDEX,NSE:NIFTYBANK-INDEX,NSE:NIFTYMID100-INDEX") =>
   get<QuotesResponse>(`/quotes?symbols=${symbols}`);
 
 // ─── Option Chain ─────────────────────────────────────────────────────────────
