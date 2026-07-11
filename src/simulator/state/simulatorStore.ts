@@ -41,6 +41,7 @@ interface SimulatorState {
 
   // Actions — Legs
   addLeg    : (leg: Omit<OptionLeg, "id">) => void;
+  setLegs   : (legs: OptionLeg[])          => void;
   removeLeg : (id: string)                 => void;
   updateLeg : (id: string, patch: Partial<OptionLeg>) => void;
   clearLegs : ()                           => void;
@@ -83,6 +84,8 @@ export const useSimulatorStore = create<SimulatorState>((set) => ({
   setRiskFreeRate: (riskFreeRate) => set({ riskFreeRate }),
 
   // Leg actions
+  setLegs: (legs) => set({ legs, payoff: null, greeks: null }),
+
   addLeg: (leg) => set(state => ({
     legs: [...state.legs, { ...leg, id: uuidv4() }],
   })),

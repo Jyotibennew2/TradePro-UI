@@ -116,18 +116,21 @@ export default function Simulator() {
   // ─── Template select ──────────────────────────────────────────────────────
   const handleTemplate = (key: string) => {
     setTemplate(key);
-    if (key === "CUSTOM") { clearLegs(); return; }
+    const st = useSimulatorStore.getState();
+    if (key === "CUSTOM") { st.clearLegs(); return; }
     try {
+      const s = effectiveSpot > 0 ? effectiveSpot : 24300;
       const built = StrategyBuilder.build(
-        key as any, underlying, effectiveSpot,
+        key as any, underlying, s,
         daysToExpiry, iv, riskFreeRate, 1
       );
-      clearLegs();
-      built.forEach(leg => addLeg(leg));
-      const name = STRATEGY_CATALOG[key as keyof typeof STRATEGY_CATALOG]?.name ?? key;
-      setStratName(name);
-    } catch {
-      clearLegs();
+      if (built.length > 0) {
+        st.setLegs(built);
+        const name = STRATEGY_CATALOG[key as keyof typeof STRATEGY_CATALOG]?.name ?? key;
+        setStratName(name);
+      }
+    } catch(e) {
+      console.error("Template error:", e);
     }
   };
 
