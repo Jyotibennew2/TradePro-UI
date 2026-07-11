@@ -116,6 +116,54 @@ export class StrategyBuilder {
           leg(A + step * 2, "CE", "BUY"),
         ].map(addId);
 
+      case "LONG_STRADDLE":
+        return [
+          leg(A, "CE", "BUY"),
+          leg(A, "PE", "BUY"),
+        ].map(addId);
+
+      case "LONG_STRANGLE":
+        return [
+          leg(A + step * 2, "CE", "BUY"),
+          leg(A - step * 2, "PE", "BUY"),
+        ].map(addId);
+
+      case "COVERED_CALL":
+        return [leg(A, "CE", "SELL")].map(addId);
+
+      case "JADE_LIZARD":
+        return [
+          leg(A - step * 2, "PE", "SELL"),
+          leg(A + step * 2, "CE", "SELL"),
+          leg(A + step * 4, "CE", "BUY"),
+        ].map(addId);
+
+      case "BWB":
+        return [
+          leg(A - step * 2, "CE", "BUY"),
+          leg(A,            "CE", "SELL"),
+          leg(A,            "CE", "SELL"),
+          leg(A + step * 4, "CE", "BUY"),
+        ].map(addId);
+
+      case "RATIO":
+        return [
+          leg(A,            "CE", "BUY",  1),
+          leg(A + step * 2, "CE", "SELL", 2),
+        ].map(addId);
+
+      case "BULL_PUT_SPREAD":
+        return [
+          leg(A,            "PE", "SELL"),
+          leg(A - step * 2, "PE", "BUY"),
+        ].map(addId);
+
+      case "BEAR_CALL_SPREAD":
+        return [
+          leg(A,            "CE", "SELL"),
+          leg(A + step * 2, "CE", "BUY"),
+        ].map(addId);
+
       case "CUSTOM":
       default:
         return [];
