@@ -2,7 +2,7 @@
  * TradePro Simulator - Strategy Builder Service
  * Build standard option strategies as OptionLeg arrays.
  */
-
+import { v4 as uuidv4 }  from "uuid";
 import { bsPrice }       from "../pricing/BlackScholes";
 import { makeOptionLeg } from "../state/simulatorStore";
 import type { OptionLeg, UnderlyingType } from "../models/Option";
@@ -126,5 +126,5 @@ export class StrategyBuilder {
 // ─── Add UUID ─────────────────────────────────────────────────────────────────
 
 function addId(leg: Omit<OptionLeg, "id">): OptionLeg {
-  return { ...leg, id: crypto.randomUUID() };
+  return { ...leg, id: uuidv4() };
 }
