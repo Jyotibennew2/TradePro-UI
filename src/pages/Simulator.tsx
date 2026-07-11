@@ -67,7 +67,7 @@ export default function Simulator() {
       const result = calculatePayoff({
         legs,
         spotRange   : { min: spots[0], max: spots[spots.length - 1], steps: 80 },
-        daysToExpiry,
+        daysToExpiry: 0,
         riskFreeRate: r,
         useBS       : true,
       });
