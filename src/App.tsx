@@ -10,6 +10,7 @@ import PaperTrade from "./pages/PaperTrade";
 import Portfolio  from "./pages/Portfolio";
 import Settings   from "./pages/Settings";
 import Simulator  from "./pages/Simulator";
+import Backtest   from "./pages/Backtest";
 
 const qc = new QueryClient({
   defaultOptions: {
@@ -48,6 +49,7 @@ export default function App() {
                 <Route path="/portfolio"element={<Portfolio  />} />
                 <Route path="/settings"   element={<Settings   />} />
                 <Route path="/simulator" element={<Simulator  />} />
+                <Route path="/backtest"  element={<Backtest   />} />
               </Routes>
             </main>
           </div>

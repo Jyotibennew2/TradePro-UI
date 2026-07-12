@@ -8,6 +8,7 @@ import {
   PieChart,
   Settings,
   BarChart2,
+  History,
 } from "lucide-react";
 
 const NAV = [
@@ -18,6 +19,7 @@ const NAV = [
   { to: "/paper",     icon: ClipboardList,   label: "Paper Trade"},
   { to: "/portfolio", icon: PieChart,        label: "Portfolio"  },
   { to: "/simulator", icon: BarChart2,       label: "Simulator"  },
+  { to: "/backtest",  icon: History,         label: "Backtest"   },
   { to: "/settings",  icon: Settings,        label: "Settings"   },
 ];
 
