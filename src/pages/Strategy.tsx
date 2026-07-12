@@ -60,8 +60,8 @@ function StrategyCard({ s }: { s: any }) {
               { label: "Entry",      value: `₹${s.entry?.toFixed(1)}`,     color: "#00c8f0" },
               { label: "SL",         value: `₹${s.sl?.toFixed(1)}`,         color: "#f03060" },
               { label: "Target",     value: `₹${s.target?.toFixed(1)}`,     color: "#00d97e" },
-              { label: "Max Profit", value: s.max_profit === Infinity ? "∞" : `₹${s.max_profit?.toFixed(1)}`, color: "#00d97e" },
-              { label: "Max Loss",   value: s.max_loss === Infinity   ? "∞" : `₹${s.max_loss?.toFixed(1)}`,   color: "#f03060" },
+              { label: "Max Profit", value: s.max_profit == null ? "∞" : `₹${s.max_profit?.toFixed(1)}`, color: "#00d97e" },
+              { label: "Max Loss",   value: s.max_loss == null   ? "∞" : `₹${s.max_loss?.toFixed(1)}`,   color: "#f03060" },
               { label: "RR Ratio",   value: `${s.risk_reward}x`,           color: "#9b5cf6" },
             ].map(({ label, value, color }) => (
               <div key={label} className="rounded-lg p-2"
@@ -119,6 +119,7 @@ export default function Strategy() {
     queryKey: ["strategy", name, effectiveSpot, expiry, iv],
     queryFn : () => fetchStrategy(effectiveSpot, expiry, iv, name),
     refetchInterval: 30000,
+    placeholderData: (previousData) => previousData,
   });
 
   const strategies = Array.isArray(data?.data) ? data.data : data?.data ? [data.data] : [];
@@ -169,7 +170,7 @@ export default function Strategy() {
 
       <div className="space-y-2">
         {strategies.map((s: any, i: number) => (
-          <StrategyCard key={i} s={s} />
+          <StrategyCard key={`${s.strategy}-${i}`} s={s} />
         ))}
       </div>
     </div>
