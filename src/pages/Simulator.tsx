@@ -3,7 +3,8 @@
  * Full strategy builder with payoff, Greeks, margin, scenario matrix.
  */
 
-import { useState, useCallback }  from "react";
+import { useState, useCallback, useEffect }  from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAppStore }            from "../store";
 import { useSimulatorStore, makeOptionLeg } from "../simulator/state/simulatorStore";
 import { StrategyBuilder }        from "../simulator/services/strategyBuilder";
@@ -133,6 +134,18 @@ export default function Simulator() {
       console.error("Template error:", e);
     }
   };
+
+  // ─── Apply template requested from Screener page ────────────────────────
+  const location = useLocation();
+  const navigate  = useNavigate();
+  useEffect(() => {
+    const requested = (location.state as any)?.template;
+    if (requested) {
+      handleTemplate(requested);
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ─── Add custom leg ───────────────────────────────────────────────────────
   const addCustomLeg = (optType: "CE" | "PE", action: "BUY" | "SELL") => {

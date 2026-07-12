@@ -11,6 +11,7 @@ import Portfolio  from "./pages/Portfolio";
 import Settings   from "./pages/Settings";
 import Simulator  from "./pages/Simulator";
 import Backtest   from "./pages/Backtest";
+import Screener2 from "./pages/Screener";
 
 const qc = new QueryClient({
   defaultOptions: {
@@ -50,6 +51,7 @@ export default function App() {
                 <Route path="/settings"   element={<Settings   />} />
                 <Route path="/simulator" element={<Simulator  />} />
                 <Route path="/backtest"  element={<Backtest   />} />
+                <Route path="/screener2" element={<Screener2 />} />
               </Routes>
             </main>
           </div>
