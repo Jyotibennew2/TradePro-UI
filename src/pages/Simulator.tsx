@@ -18,7 +18,7 @@ import { STRATEGY_CATALOG }       from "../simulator/models/Strategy";
 import type { PortfolioGreeks }   from "../simulator/models/Greeks";
 import type { BuiltStrategy }     from "../simulator/models/Strategy";
 import type { OptionLeg }         from "../simulator/models/Option";
-import { LOT_SIZES }              from "../simulator/models/Option";
+import { LOT_SIZES, STRIKE_STEPS } from "../simulator/models/Option";
 
 import StrategyTemplates  from "../simulator/components/StrategyTemplates";
 import LegRow             from "../simulator/components/LegRow";
@@ -31,10 +31,10 @@ import Loader             from "../components/ui/Loader";
 
 import {
   Plus, Save, Download, Upload, RefreshCw,
-  BarChart2, Grid, Activity, Shield,
+  BarChart2, Grid, Activity, Shield, AlertTriangle, ArrowUpDown, X,
 } from "lucide-react";
 
-type TabType = "builder" | "payoff" | "greeks" | "scenario" | "margin" | "saved";
+type TabType = "builder" | "payoff" | "greeks" | "scenario" | "margin" | "adjust" | "saved";
 
 export default function Simulator() {
   const { nifty, bankNifty }  = useAppStore();
@@ -115,6 +115,45 @@ export default function Simulator() {
     : null;
 
   // ─── Template select ──────────────────────────────────────────────────────
+  type ThreatLevel = "safe" | "watch" | "danger";
+  const BUFFER_WATCH  = 0.03;
+  const BUFFER_DANGER = 0.01;
+
+  const adjustments = legs
+    .filter(l => l.action === "SELL")
+    .map(l => {
+      const dist = l.contract.optionType === "CE"
+        ? (l.contract.strike - effectiveSpot) / effectiveSpot
+        : (effectiveSpot - l.contract.strike) / effectiveSpot;
+      let level: ThreatLevel = "safe";
+      if (dist <= BUFFER_DANGER) level = "danger";
+      else if (dist <= BUFFER_WATCH) level = "watch";
+      return { leg: l, distPct: dist * 100, level };
+    })
+    .sort((a, b) => a.distPct - b.distPct);
+
+  const worstLevel: ThreatLevel =
+    adjustments.some(a => a.level === "danger") ? "danger" :
+    adjustments.some(a => a.level === "watch")  ? "watch"  : "safe";
+
+  const handleRollStrike = (leg: OptionLeg) => {
+    const step      = STRIKE_STEPS[underlying];
+    const direction = leg.contract.optionType === "CE" ? 1 : -1;
+    const newStrike = leg.contract.strike + direction * step * 2;
+    const newPremium = Math.max(
+      bsGreeks({
+        spot: effectiveSpot, strike: newStrike, timeToExpiry: T,
+        riskFreeRate: r, volatility: leg.iv / 100, optionType: leg.contract.optionType,
+      }).price,
+      0.05
+    );
+    updateLeg(leg.id, {
+      contract    : { ...leg.contract, strike: newStrike },
+      entryPrice  : newPremium,
+      currentPrice: newPremium,
+    });
+  };
+
   const handleTemplate = (key: string) => {
     setTemplate(key);
     const st = useSimulatorStore.getState();
@@ -237,6 +276,7 @@ export default function Simulator() {
     { id: "greeks",   label: "Greeks",   icon: Activity  },
     { id: "scenario", label: "Scenario", icon: Grid      },
     { id: "margin",   label: "Margin",   icon: Shield    },
+    { id: "adjust",   label: "Adjust",   icon: AlertTriangle },
     { id: "saved",    label: "Saved",    icon: Save      },
   ];
 
@@ -247,12 +287,18 @@ export default function Simulator() {
         style={{ borderColor: "#0f1e36", background: "#060c1a" }}>
         {TABS.map(({ id, label, icon: Icon }) => (
           <button key={id} onClick={() => setTab(id)}
-            className="flex items-center gap-1 px-3 py-2 text-xs font-bold shrink-0 transition-all"
+            className="flex items-center gap-1 px-3 py-2 text-xs font-bold shrink-0 transition-all relative"
             style={{
               color      : tab === id ? "#00c8f0" : "#445566",
               borderBottom: tab === id ? "2px solid #00c8f0" : "2px solid transparent",
             }}>
             <Icon size={11} />{label}
+            {id === "adjust" && worstLevel !== "safe" && (
+              <span style={{
+                width: 6, height: 6, borderRadius: 99, marginLeft: 2,
+                background: worstLevel === "danger" ? "#f03060" : "#f0a030",
+              }} />
+            )}
           </button>
         ))}
       </div>
@@ -464,6 +510,75 @@ export default function Simulator() {
                   <div className="text-sm">Add legs to see margin requirements</div>
                 </div>
             }
+          </>
+        )}
+
+        {/* ── ADJUST TAB ── */}
+        {tab === "adjust" && (
+          <>
+            {legs.length === 0 ? (
+              <div className="text-center py-10" style={{ color: "#445566" }}>
+                <div className="text-3xl mb-2">🛠️</div>
+                <div className="text-sm">Add legs to see adjustment suggestions</div>
+              </div>
+            ) : adjustments.length === 0 ? (
+              <div className="text-center py-10" style={{ color: "#445566" }}>
+                <div className="text-3xl mb-2">🛡️</div>
+                <div className="text-sm">No short legs to monitor</div>
+                <div className="text-xs mt-1" style={{ color: "#334455" }}>
+                  Adjustment suggestions apply to SELL legs only
+                </div>
+              </div>
+            ) : (
+              <>
+                <Card title="Position Health">
+                  <div className="flex items-center gap-2 py-1">
+                    <span style={{
+                      width: 10, height: 10, borderRadius: 99,
+                      background: worstLevel === "danger" ? "#f03060" : worstLevel === "watch" ? "#f0a030" : "#00d97e",
+                    }} />
+                    <span className="text-sm font-bold" style={{
+                      color: worstLevel === "danger" ? "#f03060" : worstLevel === "watch" ? "#f0a030" : "#00d97e",
+                    }}>
+                      {worstLevel === "danger" ? "Action needed — strike breached or near breach"
+                        : worstLevel === "watch" ? "Watch closely — spot approaching a short strike"
+                        : "All short legs are safely OTM"}
+                    </span>
+                  </div>
+                </Card>
+
+                {adjustments.map(({ leg, distPct, level }) => (
+                  <Card key={leg.id}
+                    title={`${leg.action} ${leg.contract.strike} ${leg.contract.optionType}`}
+                    extra={
+                      <span className="text-xs px-2 py-0.5 rounded font-bold" style={{
+                        background: level === "danger" ? "#f0306020" : level === "watch" ? "#f0a03020" : "#00d97e20",
+                        color     : level === "danger" ? "#f03060"   : level === "watch" ? "#f0a030"   : "#00d97e",
+                      }}>
+                        {level === "danger" ? "🔴 Danger" : level === "watch" ? "🟠 Watch" : "🟢 Safe"}
+                      </span>
+                    }>
+                    <div className="text-xs mb-3" style={{ color: "#445566" }}>
+                      Spot is {distPct >= 0 ? `${distPct.toFixed(2)}% away from` : `${Math.abs(distPct).toFixed(2)}% past`} this strike.
+                    </div>
+                    {level !== "safe" && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <button onClick={() => handleRollStrike(leg)}
+                          className="py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1"
+                          style={{ background: "#00c8f020", color: "#00c8f0", border: "1px solid #00c8f030" }}>
+                          <ArrowUpDown size={11} /> Roll Strike (One-Click)
+                        </button>
+                        <button onClick={() => removeLeg(leg.id)}
+                          className="py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1"
+                          style={{ background: "#f0306015", color: "#f03060", border: "1px solid #f0306030" }}>
+                          <X size={11} /> Close Leg
+                        </button>
+                      </div>
+                    )}
+                  </Card>
+                ))}
+              </>
+            )}
           </>
         )}
 
