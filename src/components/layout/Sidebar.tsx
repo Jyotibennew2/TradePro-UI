@@ -10,6 +10,7 @@ import {
   BarChart2,
   History,
   Compass,
+  Bot,
 } from "lucide-react";
 
 const NAV = [
@@ -22,6 +23,7 @@ const NAV = [
   { to: "/simulator", icon: BarChart2,       label: "Simulator"  },
   { to: "/backtest",  icon: History,         label: "Backtest"   },
   { to: "/screener2", icon: Compass,         label: "Screener"   },
+  { to: "/ai",         icon: Bot,              label: "AI Chat"    },
   { to: "/settings",  icon: Settings,        label: "Settings"   },
 ];
 

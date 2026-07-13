@@ -10,7 +10,8 @@ import PaperTrade from "./pages/PaperTrade";
 import Portfolio  from "./pages/Portfolio";
 import Settings   from "./pages/Settings";
 import Simulator  from "./pages/Simulator";
-import Backtest   from "./pages/Backtest";
+import Backtest     from "./pages/Backtest";
+import AIAssistant from "./pages/AIAssistant";
 import Screener2 from "./pages/Screener";
 
 const qc = new QueryClient({
@@ -51,6 +52,7 @@ export default function App() {
                 <Route path="/settings"   element={<Settings   />} />
                 <Route path="/simulator" element={<Simulator  />} />
                 <Route path="/backtest"  element={<Backtest   />} />
+                <Route path="/ai"        element={<AIAssistant />} />
                 <Route path="/screener2" element={<Screener2 />} />
               </Routes>
             </main>
