@@ -37,7 +37,9 @@ function parseChain(data: any, mock: boolean) {
   return { rows: [], atmIndex: 0 };
 }
 
-export default function OptionChain() {
+type OnSelect = (strike: number, optionType: "CE" | "PE", action: "BUY" | "SELL", ltp: number) => void;
+
+export default function OptionChain({ onSelect }: { onSelect?: OnSelect } = {}) {
   const [symbol, setSymbol] = useState("NIFTY");
   const [expiry, setExpiry] = useState("");
 
@@ -144,8 +146,18 @@ export default function OptionChain() {
                   }}>
                   <div style={{ color: "#00d97e88" }}>{fmtOI(row.ce_oi)}</div>
                   <div style={{ color: "#00c8f077" }}>{row.ce_iv ? row.ce_iv.toFixed(1) + "%" : "-"}</div>
-                  <div style={{ color: "#00d97e", fontWeight: isAtm ? 800 : 500 }}>
-                    {row.ce_ltp != null ? "₹" + fmt(row.ce_ltp) : "-"}
+                  <div>
+                    <div style={{ color: "#00d97e", fontWeight: isAtm ? 800 : 500 }}>
+                      {row.ce_ltp != null ? "₹" + fmt(row.ce_ltp) : "-"}
+                    </div>
+                    {onSelect && row.ce_ltp != null && (
+                      <div className="flex gap-0.5 justify-center mt-0.5">
+                        <button onClick={() => onSelect(row.strike, "CE", "BUY", row.ce_ltp)}
+                          className="text-[9px] px-1 rounded font-bold" style={{ background: "#00d97e20", color: "#00d97e" }}>B</button>
+                        <button onClick={() => onSelect(row.strike, "CE", "SELL", row.ce_ltp)}
+                          className="text-[9px] px-1 rounded font-bold" style={{ background: "#f0306020", color: "#f03060" }}>S</button>
+                      </div>
+                    )}
                   </div>
                   <div style={{
                     color     : isAtm ? "#00c8f0" : "#8899aa",
@@ -155,8 +167,18 @@ export default function OptionChain() {
                   }}>
                     {row.strike}
                   </div>
-                  <div style={{ color: "#f03060", fontWeight: isAtm ? 800 : 500 }}>
-                    {row.pe_ltp != null ? "₹" + fmt(row.pe_ltp) : "-"}
+                  <div>
+                    <div style={{ color: "#f03060", fontWeight: isAtm ? 800 : 500 }}>
+                      {row.pe_ltp != null ? "₹" + fmt(row.pe_ltp) : "-"}
+                    </div>
+                    {onSelect && row.pe_ltp != null && (
+                      <div className="flex gap-0.5 justify-center mt-0.5">
+                        <button onClick={() => onSelect(row.strike, "PE", "BUY", row.pe_ltp)}
+                          className="text-[9px] px-1 rounded font-bold" style={{ background: "#00d97e20", color: "#00d97e" }}>B</button>
+                        <button onClick={() => onSelect(row.strike, "PE", "SELL", row.pe_ltp)}
+                          className="text-[9px] px-1 rounded font-bold" style={{ background: "#f0306020", color: "#f03060" }}>S</button>
+                      </div>
+                    )}
                   </div>
                   <div style={{ color: "#f0306077" }}>{row.pe_iv ? row.pe_iv.toFixed(1) + "%" : "-"}</div>
                   <div style={{ color: "#f0306088" }}>{fmtOI(row.pe_oi)}</div>

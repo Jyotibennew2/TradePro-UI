@@ -114,7 +114,9 @@ export default function Workspace() {
             <div className="min-w-0">
               <Card title="Option Chain">
                 <div style={{ height: 420 }}>
-                  <OptionChain />
+                  <OptionChain onSelect={(strike, optType, action, ltp) => {
+                    addLeg(makeOptionLeg(underlying, strike, optType, action, 1, ltp, iv, ""));
+                  }} />
                 </div>
               </Card>
             </div>
