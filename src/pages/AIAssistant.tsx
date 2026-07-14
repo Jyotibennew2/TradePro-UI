@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useAppStore } from "../store";
 import { useSimulatorStore } from "../simulator/state/simulatorStore";
 import { Send, Bot, User, TrendingUp, BarChart2, Zap } from "lucide-react";
+import { useTheme } from "../store/themeStore";
 
 interface Message {
   role   : "user" | "assistant";
@@ -21,6 +22,7 @@ const QUICK_PROMPTS = [
 ];
 
 export default function AIAssistant() {
+  const theme = useTheme();
   const { nifty, bankNifty } = useAppStore();
   const legs = useSimulatorStore(s => s.legs);
   const iv   = useSimulatorStore(s => s.iv);
@@ -114,29 +116,29 @@ Rules:
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b"
-        style={{ borderColor: "#0f1e36", background: "#060c1a" }}>
+        style={{ borderColor: theme.border.subtle, background: theme.bg.surface }}>
         <div className="w-8 h-8 rounded-full flex items-center justify-center"
-          style={{ background: "#00c8f020", border: "1px solid #00c8f040" }}>
-          <Bot size={16} color="#00c8f0" />
+          style={{ background: theme.accent.cyan + "20", border: `1px solid ${theme.accent.cyan}40` }}>
+          <Bot size={16} color={theme.accent.cyan} />
         </div>
         <div>
-          <div className="text-sm font-bold" style={{ color: "#00c8f0" }}>TradePro AI</div>
-          <div className="text-xs" style={{ color: "#00d97e" }}>● Online • Powered by Claude</div>
+          <div className="text-sm font-bold" style={{ color: theme.accent.cyan }}>TradePro AI</div>
+          <div className="text-sm" style={{ color: theme.accent.green }}>● Online • Powered by Claude</div>
         </div>
-        <div className="ml-auto flex gap-2 text-xs">
-          <span style={{ background: "#090f1e", border: "1px solid #0f1e36", borderRadius: 6, padding: "2px 8px", color: "#445566" }}>
-            N: <span style={{ color: "#00c8f0" }}>{nifty > 0 ? nifty.toLocaleString("en-IN") : "---"}</span>
+        <div className="ml-auto flex gap-2 text-sm">
+          <span style={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}`, borderRadius: 6, padding: "2px 8px", color: theme.text.muted }}>
+            N: <span style={{ color: theme.accent.cyan }}>{nifty > 0 ? nifty.toLocaleString("en-IN") : "---"}</span>
           </span>
         </div>
       </div>
 
       {/* Quick prompts */}
       <div className="flex gap-2 px-3 py-2 overflow-x-auto border-b"
-        style={{ borderColor: "#0f1e36" }}>
+        style={{ borderColor: theme.border.subtle }}>
         {QUICK_PROMPTS.map((p, i) => (
           <button key={i} onClick={() => sendMessage(p.text)}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold shrink-0 transition-all"
-            style={{ background: "#090f1e", border: "1px solid #0f1e36", color: "#445566" }}>
+            className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-bold shrink-0 transition-all"
+            style={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}`, color: theme.text.muted }}>
             <span>{p.icon}</span>
             <span>{p.label}</span>
           </button>
@@ -148,30 +150,30 @@ Rules:
         {messages.map((msg, i) => (
           <div key={i} className={`flex gap-2 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
             {/* Avatar */}
-            <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-1"
+            <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1"
               style={{
-                background: msg.role === "assistant" ? "#00c8f020" : "#9b5cf620",
-                border    : `1px solid ${msg.role === "assistant" ? "#00c8f040" : "#9b5cf640"}`,
+                background: msg.role === "assistant" ? theme.accent.cyan + "20" : theme.accent.purple + "20",
+                border    : `1px solid ${msg.role === "assistant" ? theme.accent.cyan + "40" : theme.accent.purple + "40"}`,
               }}>
               {msg.role === "assistant"
-                ? <Bot  size={12} color="#00c8f0" />
-                : <User size={12} color="#9b5cf6" />
+                ? <Bot  size={16} color={theme.accent.cyan} />
+                : <User size={16} color={theme.accent.purple} />
               }
             </div>
 
             {/* Bubble */}
             <div className="max-w-xs">
-              <div className="rounded-2xl px-3 py-2 text-xs"
+              <div className="rounded-2xl px-3 py-2 text-sm"
                 style={{
-                  background  : msg.role === "assistant" ? "#090f1e" : "#9b5cf620",
-                  border      : `1px solid ${msg.role === "assistant" ? "#0f1e36" : "#9b5cf640"}`,
-                  color       : "#c0d0e8",
+                  background  : msg.role === "assistant" ? theme.bg.surfaceAlt : theme.accent.purple + "20",
+                  border      : `1px solid ${msg.role === "assistant" ? theme.border.subtle : theme.accent.purple + "40"}`,
+                  color       : theme.text.secondary,
                   whiteSpace  : "pre-wrap",
                   lineHeight  : 1.6,
                 }}>
                 {msg.content}
               </div>
-              <div className="text-xs mt-0.5 px-1" style={{ color: "#334455" }}>
+              <div className="text-sm mt-0.5 px-1" style={{ color: theme.text.faint }}>
                 {msg.time}
               </div>
             </div>
@@ -181,16 +183,16 @@ Rules:
         {/* Loading */}
         {loading && (
           <div className="flex gap-2">
-            <div className="w-7 h-7 rounded-full flex items-center justify-center"
-              style={{ background: "#00c8f020", border: "1px solid #00c8f040" }}>
-              <Bot size={12} color="#00c8f0" />
+            <div className="w-8 h-8 rounded-full flex items-center justify-center"
+              style={{ background: theme.accent.cyan + "20", border: `1px solid ${theme.accent.cyan}40` }}>
+              <Bot size={16} color={theme.accent.cyan} />
             </div>
             <div className="rounded-2xl px-4 py-3"
-              style={{ background: "#090f1e", border: "1px solid #0f1e36" }}>
+              style={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}` }}>
               <div className="flex gap-1">
                 {[0,1,2].map(i => (
                   <div key={i} className="w-1.5 h-1.5 rounded-full animate-bounce"
-                    style={{ background: "#00c8f0", animationDelay: `${i * 0.15}s` }} />
+                    style={{ background: theme.accent.cyan, animationDelay: `${i * 0.15}s` }} />
                 ))}
               </div>
             </div>
@@ -201,7 +203,7 @@ Rules:
       </div>
 
       {/* Input */}
-      <div className="p-3 border-t" style={{ borderColor: "#0f1e36" }}>
+      <div className="p-3 border-t" style={{ borderColor: theme.border.subtle }}>
         <div className="flex gap-2 items-end">
           <textarea
             value={input}
@@ -214,24 +216,24 @@ Rules:
             }}
             placeholder="Options strategy poochho... (e.g. NIFTY ke liye best strategy?)"
             rows={2}
-            className="flex-1 px-3 py-2 rounded-xl text-xs outline-none resize-none"
+            className="flex-1 px-3 py-2 rounded-xl text-sm outline-none resize-none"
             style={{
-              background: "#090f1e",
-              border    : "1px solid #0f1e36",
-              color     : "#c0d0e8",
+              background: theme.bg.surfaceAlt,
+              border    : `1px solid ${theme.border.subtle}`,
+              color     : theme.text.secondary,
             }}
           />
           <button onClick={() => sendMessage()}
             disabled={!input.trim() || loading}
             className="p-3 rounded-xl flex items-center justify-center"
             style={{
-              background: input.trim() && !loading ? "#00c8f0" : "#0f1e36",
-              color     : input.trim() && !loading ? "#03050d" : "#445566",
+              background: input.trim() && !loading ? theme.accent.cyan : theme.border.subtle,
+              color     : input.trim() && !loading ? theme.bg.page : theme.text.muted,
             }}>
-            <Send size={16} />
+            <Send size={18} />
           </button>
         </div>
-        <div className="text-xs text-center mt-1" style={{ color: "#334455" }}>
+        <div className="text-sm text-center mt-1" style={{ color: theme.text.faint }}>
           Educational purposes only • Not financial advice
         </div>
       </div>
