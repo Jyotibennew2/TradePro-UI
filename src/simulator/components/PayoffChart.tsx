@@ -9,6 +9,7 @@ import {
   ResponsiveContainer, Legend,
 } from "recharts";
 import type { PayoffResult } from "../models/Payoff";
+import { useTheme } from "../../store/themeStore";
 
 interface Props {
   result     : PayoffResult;
@@ -20,23 +21,24 @@ function fmt(n: number): string {
   return n.toLocaleString("en-IN", { maximumFractionDigits: 0 });
 }
 
-function CustomTooltip({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="rounded-lg px-3 py-2 text-sm"
-      style={{ background: "#060c1a", border: "1px solid #1a3050" }}>
-      <div style={{ color: "#8ba0bd" }}>Spot: ₹{fmt(label)}</div>
-      {payload.map((p: any, i: number) => (
-        <div key={i} style={{ color: p.color }}>
-          {p.name}: {p.value >= 0 ? "+" : ""}₹{fmt(p.value)}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export default function PayoffChart({ result, spot, showPerLeg = false }: Props) {
+  const theme = useTheme();
   const { combined, perLeg } = result;
+
+  function CustomTooltip({ active, payload, label }: any) {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="rounded-lg px-3 py-2 text-sm"
+        style={{ background: theme.bg.surface, border: `1px solid ${theme.border.strong}` }}>
+        <div style={{ color: theme.text.muted }}>Spot: ₹{fmt(label)}</div>
+        {payload.map((p: any, i: number) => (
+          <div key={i} style={{ color: p.color }}>
+            {p.name}: {p.value >= 0 ? "+" : ""}₹{fmt(p.value)}
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   // Merge combined + per-leg data
   const chartData = combined.points.map((pt, i) => {
@@ -60,14 +62,14 @@ export default function PayoffChart({ result, spot, showPerLeg = false }: Props)
       {/* Stats row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
         {[
-          { label: "Max Profit", value: combined.maxProfit, color: "#22e894"  },
-          { label: "Max Loss",   value: combined.maxLoss,   color: "#ff5577"  },
-          { label: "Net Premium",value: result.netPremium,  color: "#3ad4ff"  },
-          { label: "ROR %",      value: result.rorPct,      color: "#b98cf9", suffix: "%" },
+          { label: "Max Profit", value: combined.maxProfit, color: theme.accent.green  },
+          { label: "Max Loss",   value: combined.maxLoss,   color: theme.accent.red  },
+          { label: "Net Premium",value: result.netPremium,  color: theme.accent.cyan  },
+          { label: "ROR %",      value: result.rorPct,      color: theme.accent.purple, suffix: "%" },
         ].map(({ label, value, color, suffix = "" }) => (
           <div key={label} className="rounded-lg p-2 text-center"
-            style={{ background: "#060c1a", border: "1px solid #1a3050" }}>
-            <div className="text-sm mb-1 font-semibold" style={{ color: "#8ba0bd" }}>{label}</div>
+            style={{ background: theme.bg.surface, border: `1px solid ${theme.border.strong}` }}>
+            <div className="text-sm mb-1 font-semibold" style={{ color: theme.text.muted }}>{label}</div>
             <div className="text-sm font-bold" style={{ color }}>
               {value >= 0 ? "+" : ""}₹{fmt(value)}{suffix}
             </div>
@@ -78,10 +80,10 @@ export default function PayoffChart({ result, spot, showPerLeg = false }: Props)
       {/* Breakevens */}
       {combined.breakevens.length > 0 && (
         <div className="flex gap-2 mb-3 flex-wrap items-center">
-          <span className="text-sm font-semibold" style={{ color: "#8ba0bd" }}>Breakeven:</span>
+          <span className="text-sm font-semibold" style={{ color: theme.text.muted }}>Breakeven:</span>
           {combined.breakevens.map(be => (
             <span key={be} className="text-sm px-2 py-1 rounded font-bold"
-              style={{ background: "#f0a03020", color: "#f0a030" }}>
+              style={{ background: theme.accent.orange + "20", color: theme.accent.orange }}>
               ₹{fmt(be)}
             </span>
           ))}
@@ -91,21 +93,21 @@ export default function PayoffChart({ result, spot, showPerLeg = false }: Props)
       {/* Chart */}
       <ResponsiveContainer width="100%" height={240}>
         <ComposedChart data={chartData} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
-          <CartesianGrid stroke="#0f1e36" strokeDasharray="3 3" />
+          <CartesianGrid stroke={theme.border.subtle} strokeDasharray="3 3" />
 
           <XAxis
             dataKey="spot"
-            tick={{ fill: "#8ba0bd", fontSize: 12 }}
+            tick={{ fill: theme.text.muted, fontSize: 12 }}
             tickFormatter={v => (v / 1000).toFixed(1) + "k"}
-            axisLine={{ stroke: "#1a3050" }}
+            axisLine={{ stroke: theme.border.strong }}
             tickLine={false}
           />
 
           <YAxis
             domain={yDomain}
-            tick={{ fill: "#8ba0bd", fontSize: 12 }}
+            tick={{ fill: theme.text.muted, fontSize: 12 }}
             tickFormatter={v => v >= 0 ? `+${(v/1000).toFixed(1)}k` : `${(v/1000).toFixed(1)}k`}
-            axisLine={{ stroke: "#1a3050" }}
+            axisLine={{ stroke: theme.border.strong }}
             tickLine={false}
             width={48}
           />
@@ -113,19 +115,19 @@ export default function PayoffChart({ result, spot, showPerLeg = false }: Props)
           <Tooltip content={<CustomTooltip />} />
 
           {/* Zero line */}
-          <ReferenceLine y={0} stroke="#5a7290" strokeDasharray="4 4" />
+          <ReferenceLine y={0} stroke={theme.text.faint} strokeDasharray="4 4" />
 
           {/* Current spot */}
           <ReferenceLine
             x={spot}
-            stroke="#f0a030"
+            stroke={theme.accent.orange}
             strokeDasharray="4 4"
-            label={{ value: "Spot", fill: "#f0a030", fontSize: 12, fontWeight: 700, position: "top" }}
+            label={{ value: "Spot", fill: theme.accent.orange, fontSize: 12, fontWeight: 700, position: "top" }}
           />
 
           {/* Breakeven lines */}
           {combined.breakevens.map(be => (
-            <ReferenceLine key={be} x={be} stroke="#5a7290" strokeDasharray="2 4" />
+            <ReferenceLine key={be} x={be} stroke={theme.text.faint} strokeDasharray="2 4" />
           ))}
 
           {/* Per-leg lines */}
@@ -145,17 +147,17 @@ export default function PayoffChart({ result, spot, showPerLeg = false }: Props)
           {/* Combined payoff area */}
           <defs>
             <linearGradient id="payoffGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%"  stopColor="#22e894" stopOpacity={0.3} />
-              <stop offset="50%" stopColor="#22e894" stopOpacity={0}   />
-              <stop offset="50%" stopColor="#ff5577" stopOpacity={0}   />
-              <stop offset="95%" stopColor="#ff5577" stopOpacity={0.2} />
+              <stop offset="5%"  stopColor={theme.accent.green} stopOpacity={0.3} />
+              <stop offset="50%" stopColor={theme.accent.green} stopOpacity={0}   />
+              <stop offset="50%" stopColor={theme.accent.red} stopOpacity={0}   />
+              <stop offset="95%" stopColor={theme.accent.red} stopOpacity={0.2} />
             </linearGradient>
           </defs>
 
           <Area
             type="monotone"
             dataKey="pnl"
-            stroke="#3ad4ff"
+            stroke={theme.accent.cyan}
             strokeWidth={2.5}
             fill="url(#payoffGrad)"
             dot={false}
@@ -163,7 +165,7 @@ export default function PayoffChart({ result, spot, showPerLeg = false }: Props)
           />
 
           {showPerLeg && <Legend
-            wrapperStyle={{ fontSize: 12, color: "#8ba0bd" }}
+            wrapperStyle={{ fontSize: 12, color: theme.text.muted }}
           />}
         </ComposedChart>
       </ResponsiveContainer>
