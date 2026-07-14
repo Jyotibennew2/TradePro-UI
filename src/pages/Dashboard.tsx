@@ -4,20 +4,23 @@ import Card from "../components/ui/Card";
 import Loader from "../components/ui/Loader";
 import { TrendingUp, TrendingDown, DollarSign, Activity, Server } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { useTheme } from "../store/themeStore";
+import type { Theme } from "../styles/theme";
 
-function StatBox({ label, value, sub, color = "#00c8f0" }: {
-  label: string; value: string; sub?: string; color?: string;
+function StatBox({ label, value, sub, color, theme }: {
+  label: string; value: string; sub?: string; color: string; theme: Theme;
 }) {
   return (
-    <div className="rounded-xl p-4" style={{ background: "#090f1e", border: "1px solid #0f1e36" }}>
-      <div className="text-xs mb-1" style={{ color: "#445566" }}>{label}</div>
+    <div className="rounded-xl p-4" style={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}` }}>
+      <div className="text-sm mb-1" style={{ color: theme.text.muted }}>{label}</div>
       <div className="text-xl font-black" style={{ color }}>{value}</div>
-      {sub && <div className="text-xs mt-1" style={{ color: "#334455" }}>{sub}</div>}
+      {sub && <div className="text-sm mt-1" style={{ color: theme.text.faint }}>{sub}</div>}
     </div>
   );
 }
 
 export default function Dashboard() {
+  const theme = useTheme();
   const health  = useQuery({ queryKey: ["health"],    queryFn: fetchHealth,    refetchInterval: 10000 });
   const quotes  = useQuery({ queryKey: ["quotes"],    queryFn: fetchQuotes,    refetchInterval: 3000  });
   const funds   = useQuery({ queryKey: ["funds"],     queryFn: fetchFunds,     refetchInterval: 30000 });
@@ -49,10 +52,10 @@ export default function Dashboard() {
   return (
     <div className="p-4 space-y-4">
       {/* Status bar */}
-      <div className="flex items-center gap-3 text-xs" style={{ color: "#445566" }}>
-        <Server size={12} />
+      <div className="flex items-center gap-3 text-sm" style={{ color: theme.text.muted }}>
+        <Server size={14} />
         <span>Backend</span>
-        <span style={{ color: health.data?.authenticated ? "#00d97e" : "#f03060" }}>
+        <span style={{ color: health.data?.authenticated ? theme.accent.green : theme.accent.red }}>
           ● {health.data?.authenticated ? "LIVE" : "MOCK"}
         </span>
         <span>v{health.data?.version ?? "---"}</span>
@@ -61,29 +64,29 @@ export default function Dashboard() {
 
       {/* Index cards */}
       <div className="grid grid-cols-2 gap-3">
-        <StatBox
+        <StatBox theme={theme}
           label="NIFTY 50"
           value={fmt(nifty?.ltp)}
           sub={pct(nifty?.chp)}
-          color={(nifty?.ch ?? 0) >= 0 ? "#00d97e" : "#f03060"}
+          color={(nifty?.ch ?? 0) >= 0 ? theme.accent.green : theme.accent.red}
         />
-        <StatBox
+        <StatBox theme={theme}
           label="BANK NIFTY"
           value={fmt(bank?.ltp)}
           sub={pct(bank?.chp)}
-          color={(bank?.ch ?? 0) >= 0 ? "#00d97e" : "#f03060"}
+          color={(bank?.ch ?? 0) >= 0 ? theme.accent.green : theme.accent.red}
         />
-        <StatBox
+        <StatBox theme={theme}
           label="Paper Capital"
           value={`₹${fmt(p?.capital)}`}
           sub="Paper Trading"
-          color="#9b5cf6"
+          color={theme.accent.purple}
         />
-        <StatBox
+        <StatBox theme={theme}
           label="Total P&L"
           value={`₹${fmt(p?.total_pnl)}`}
           sub={`${p?.open_count ?? 0} open positions`}
-          color={(p?.total_pnl ?? 0) >= 0 ? "#00d97e" : "#f03060"}
+          color={(p?.total_pnl ?? 0) >= 0 ? theme.accent.green : theme.accent.red}
         />
       </div>
 
@@ -92,12 +95,12 @@ export default function Dashboard() {
         <Card title="Funds">
           <div className="grid grid-cols-3 gap-3 text-center">
             {[
-              { label: "Total",     value: f.total,     color: "#c0d0e8" },
-              { label: "Used",      value: f.used,      color: "#f03060" },
-              { label: "Available", value: f.available, color: "#00d97e" },
+              { label: "Total",     value: f.total,     color: theme.text.secondary },
+              { label: "Used",      value: f.used,      color: theme.accent.red },
+              { label: "Available", value: f.available, color: theme.accent.green },
             ].map(({ label, value, color }) => (
               <div key={label}>
-                <div className="text-xs mb-1" style={{ color: "#445566" }}>{label}</div>
+                <div className="text-sm mb-1" style={{ color: theme.text.muted }}>{label}</div>
                 <div className="text-sm font-bold" style={{ color }}>
                   ₹{fmt(value)}
                 </div>
@@ -113,36 +116,36 @@ export default function Dashboard() {
           <AreaChart data={equityCurve}>
             <defs>
               <linearGradient id="pnlGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%"  stopColor="#00c8f0" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#00c8f0" stopOpacity={0}   />
+                <stop offset="5%"  stopColor={theme.accent.cyan} stopOpacity={0.3} />
+                <stop offset="95%" stopColor={theme.accent.cyan} stopOpacity={0}   />
               </linearGradient>
             </defs>
-            <XAxis dataKey="t" tick={{ fill: "#445566", fontSize: 10 }} axisLine={false} tickLine={false} />
+            <XAxis dataKey="t" tick={{ fill: theme.text.muted, fontSize: 12 }} axisLine={false} tickLine={false} />
             <YAxis hide />
             <Tooltip
-              contentStyle={{ background: "#090f1e", border: "1px solid #0f1e36", borderRadius: 8, fontSize: 11 }}
-              labelStyle={{ color: "#445566" }}
+              contentStyle={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}`, borderRadius: 8, fontSize: 13 }}
+              labelStyle={{ color: theme.text.muted }}
               formatter={(v: number) => [`₹${v.toLocaleString("en-IN")}`, "Capital"]}
             />
-            <Area type="monotone" dataKey="v" stroke="#00c8f0" strokeWidth={2} fill="url(#pnlGrad)" />
+            <Area type="monotone" dataKey="v" stroke={theme.accent.cyan} strokeWidth={2} fill="url(#pnlGrad)" />
           </AreaChart>
         </ResponsiveContainer>
-        <div className="grid grid-cols-3 gap-2 mt-3 text-center text-xs">
+        <div className="grid grid-cols-3 gap-2 mt-3 text-center text-sm">
           <div>
-            <div style={{ color: "#445566" }}>Realized</div>
-            <div style={{ color: (p?.realized_pnl ?? 0) >= 0 ? "#00d97e" : "#f03060" }}>
+            <div style={{ color: theme.text.muted }}>Realized</div>
+            <div style={{ color: (p?.realized_pnl ?? 0) >= 0 ? theme.accent.green : theme.accent.red }}>
               ₹{fmt(p?.realized_pnl)}
             </div>
           </div>
           <div>
-            <div style={{ color: "#445566" }}>Unrealized</div>
-            <div style={{ color: (p?.unrealized_pnl ?? 0) >= 0 ? "#00d97e" : "#f03060" }}>
+            <div style={{ color: theme.text.muted }}>Unrealized</div>
+            <div style={{ color: (p?.unrealized_pnl ?? 0) >= 0 ? theme.accent.green : theme.accent.red }}>
               ₹{fmt(p?.unrealized_pnl)}
             </div>
           </div>
           <div>
-            <div style={{ color: "#445566" }}>Open</div>
-            <div style={{ color: "#00c8f0" }}>{p?.open_count ?? 0}</div>
+            <div style={{ color: theme.text.muted }}>Open</div>
+            <div style={{ color: theme.accent.cyan }}>{p?.open_count ?? 0}</div>
           </div>
         </div>
       </Card>
