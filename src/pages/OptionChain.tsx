@@ -4,6 +4,7 @@ import { fetchChain } from "../utils/api";
 import Loader from "../components/ui/Loader";
 import ErrorBox from "../components/ui/ErrorBox";
 import { RefreshCw } from "lucide-react";
+import { useTheme } from "../store/themeStore";
 
 const SYMBOLS = ["NIFTY", "BANKNIFTY"];
 
@@ -40,6 +41,7 @@ function parseChain(data: any, mock: boolean) {
 type OnSelect = (strike: number, optionType: "CE" | "PE", action: "BUY" | "SELL", ltp: number) => void;
 
 export default function OptionChain({ onSelect }: { onSelect?: OnSelect } = {}) {
+  const theme = useTheme();
   const [symbol, setSymbol] = useState("NIFTY");
   const [expiry, setExpiry] = useState("");
 
@@ -63,16 +65,16 @@ export default function OptionChain({ onSelect }: { onSelect?: OnSelect } = {}) 
     <div className="flex flex-col h-full">
       {/* Controls */}
       <div className="flex items-center gap-2 p-3 border-b flex-wrap"
-        style={{ borderColor: "#0f1e36" }}>
+        style={{ borderColor: theme.border.subtle }}>
         {/* Symbol toggle */}
         <div className="flex rounded-lg overflow-hidden"
-          style={{ border: "1px solid #0f1e36" }}>
+          style={{ border: `1px solid ${theme.border.subtle}` }}>
           {SYMBOLS.map(s => (
             <button key={s} onClick={() => { setSymbol(s); setExpiry(""); }}
-              className="px-3 py-1 text-xs font-bold transition-all"
+              className="px-3 py-1 text-sm font-bold transition-all"
               style={{
-                background: symbol === s ? "#00c8f0" : "#090f1e",
-                color     : symbol === s ? "#03050d" : "#445566",
+                background: symbol === s ? theme.accent.cyan : theme.bg.surfaceAlt,
+                color     : symbol === s ? theme.bg.page : theme.text.muted,
               }}>
               {s}
             </button>
@@ -82,8 +84,8 @@ export default function OptionChain({ onSelect }: { onSelect?: OnSelect } = {}) 
         {/* Expiry */}
         {expiries.length > 0 && (
           <select value={expiry} onChange={e => setExpiry(e.target.value)}
-            className="text-xs px-2 py-1 rounded-lg outline-none"
-            style={{ background: "#090f1e", border: "1px solid #0f1e36", color: "#c0d0e8" }}>
+            className="text-sm px-2 py-1 rounded-lg outline-none"
+            style={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}`, color: theme.text.secondary }}>
             <option value="">Nearest</option>
             {expiries.map((e: any) => (
               <option key={e.expiry} value={e.expiry}>{e.date}</option>
@@ -92,23 +94,23 @@ export default function OptionChain({ onSelect }: { onSelect?: OnSelect } = {}) 
         )}
 
         {/* Spot */}
-        <span className="text-xs" style={{ color: "#445566" }}>
-          Spot: <span style={{ color: "#00c8f0", fontWeight: 700 }}>
+        <span className="text-sm" style={{ color: theme.text.muted }}>
+          Spot: <span style={{ color: theme.accent.cyan, fontWeight: 700 }}>
             {spot > 0 ? spot.toLocaleString("en-IN") : "---"}
           </span>
         </span>
 
         {/* Mock badge */}
-        <span className="text-xs px-2 py-0.5 rounded ml-auto"
-          style={{ background: isMock ? "#f0a03020" : "#00d97e20", color: isMock ? "#f0a030" : "#00d97e" }}>
+        <span className="text-sm px-2 py-0.5 rounded ml-auto font-bold"
+          style={{ background: isMock ? theme.accent.orange + "20" : theme.accent.green + "20", color: isMock ? theme.accent.orange : theme.accent.green }}>
           {isMock ? "MOCK" : "LIVE"}
         </span>
 
         {/* Refresh */}
         <button onClick={() => refetch()}
-          className="p-1.5 rounded-lg transition-all"
-          style={{ background: "#0f1e36", color: "#00c8f0" }}>
-          <RefreshCw size={12} className={isFetching ? "animate-spin" : ""} />
+          className="p-2 rounded-lg transition-all"
+          style={{ background: theme.border.subtle, color: theme.accent.cyan }}>
+          <RefreshCw size={16} className={isFetching ? "animate-spin" : ""} />
         </button>
       </div>
 
@@ -120,15 +122,15 @@ export default function OptionChain({ onSelect }: { onSelect?: OnSelect } = {}) 
         {rows.length > 0 && (
           <>
             {/* Header */}
-            <div className="grid text-center mb-2 px-1"
-              style={{ gridTemplateColumns: "1fr 1fr 1fr 72px 1fr 1fr 1fr", fontSize: 9, color: "#334455" }}>
-              <div style={{ color: "#00d97e88" }}>CE OI</div>
-              <div style={{ color: "#00d97e88" }}>CE IV</div>
-              <div style={{ color: "#00d97e"   }}>CE LTP</div>
-              <div style={{ color: "#00c8f0"   }}>STRIKE</div>
-              <div style={{ color: "#f03060"   }}>PE LTP</div>
-              <div style={{ color: "#f0306088" }}>PE IV</div>
-              <div style={{ color: "#f0306088" }}>PE OI</div>
+            <div className="grid text-center mb-2 px-1 font-semibold"
+              style={{ gridTemplateColumns: "1fr 1fr 1fr 76px 1fr 1fr 1fr", fontSize: 11, color: theme.text.faint }}>
+              <div style={{ color: theme.accent.green }}>CE OI</div>
+              <div style={{ color: theme.accent.green }}>CE IV</div>
+              <div style={{ color: theme.accent.green }}>CE LTP</div>
+              <div style={{ color: theme.accent.cyan  }}>STRIKE</div>
+              <div style={{ color: theme.accent.red   }}>PE LTP</div>
+              <div style={{ color: theme.accent.red   }}>PE IV</div>
+              <div style={{ color: theme.accent.red   }}>PE OI</div>
             </div>
 
             {/* Rows */}
@@ -138,50 +140,50 @@ export default function OptionChain({ onSelect }: { onSelect?: OnSelect } = {}) 
                 <div key={i}
                   className="grid text-center mb-0.5 rounded-md"
                   style={{
-                    gridTemplateColumns: "1fr 1fr 1fr 72px 1fr 1fr 1fr",
-                    background : isAtm ? "#0d1f38" : i % 2 === 0 ? "#060c1a" : "#070e1c",
-                    border     : isAtm ? "1px solid #00c8f040" : "1px solid transparent",
-                    padding    : "5px 2px",
-                    fontSize   : 11,
+                    gridTemplateColumns: "1fr 1fr 1fr 76px 1fr 1fr 1fr",
+                    background : isAtm ? theme.accent.cyan + "12" : i % 2 === 0 ? theme.bg.surface : theme.bg.surfaceAlt,
+                    border     : isAtm ? `1px solid ${theme.accent.cyan}40` : "1px solid transparent",
+                    padding    : "6px 2px",
+                    fontSize   : 13,
                   }}>
-                  <div style={{ color: "#00d97e88" }}>{fmtOI(row.ce_oi)}</div>
-                  <div style={{ color: "#00c8f077" }}>{row.ce_iv ? row.ce_iv.toFixed(1) + "%" : "-"}</div>
+                  <div style={{ color: theme.text.faint }}>{fmtOI(row.ce_oi)}</div>
+                  <div style={{ color: theme.text.faint }}>{row.ce_iv ? row.ce_iv.toFixed(1) + "%" : "-"}</div>
                   <div>
-                    <div style={{ color: "#00d97e", fontWeight: isAtm ? 800 : 500 }}>
+                    <div style={{ color: theme.accent.green, fontWeight: isAtm ? 800 : 600 }}>
                       {row.ce_ltp != null ? "₹" + fmt(row.ce_ltp) : "-"}
                     </div>
                     {onSelect && row.ce_ltp != null && (
-                      <div className="flex gap-0.5 justify-center mt-0.5">
+                      <div className="flex gap-1 justify-center mt-0.5">
                         <button onClick={() => onSelect(row.strike, "CE", "BUY", row.ce_ltp)}
-                          className="text-[9px] px-1 rounded font-bold" style={{ background: "#00d97e20", color: "#00d97e" }}>B</button>
+                          className="text-xs px-1.5 rounded font-bold" style={{ background: theme.accent.green + "20", color: theme.accent.green }}>B</button>
                         <button onClick={() => onSelect(row.strike, "CE", "SELL", row.ce_ltp)}
-                          className="text-[9px] px-1 rounded font-bold" style={{ background: "#f0306020", color: "#f03060" }}>S</button>
+                          className="text-xs px-1.5 rounded font-bold" style={{ background: theme.accent.red + "20", color: theme.accent.red }}>S</button>
                       </div>
                     )}
                   </div>
                   <div style={{
-                    color     : isAtm ? "#00c8f0" : "#8899aa",
+                    color     : isAtm ? theme.accent.cyan : theme.text.secondary,
                     fontWeight: 700,
-                    background: isAtm ? "#00c8f015" : "none",
+                    background: isAtm ? theme.accent.cyan + "15" : "none",
                     borderRadius: 4,
                   }}>
                     {row.strike}
                   </div>
                   <div>
-                    <div style={{ color: "#f03060", fontWeight: isAtm ? 800 : 500 }}>
+                    <div style={{ color: theme.accent.red, fontWeight: isAtm ? 800 : 600 }}>
                       {row.pe_ltp != null ? "₹" + fmt(row.pe_ltp) : "-"}
                     </div>
                     {onSelect && row.pe_ltp != null && (
-                      <div className="flex gap-0.5 justify-center mt-0.5">
+                      <div className="flex gap-1 justify-center mt-0.5">
                         <button onClick={() => onSelect(row.strike, "PE", "BUY", row.pe_ltp)}
-                          className="text-[9px] px-1 rounded font-bold" style={{ background: "#00d97e20", color: "#00d97e" }}>B</button>
+                          className="text-xs px-1.5 rounded font-bold" style={{ background: theme.accent.green + "20", color: theme.accent.green }}>B</button>
                         <button onClick={() => onSelect(row.strike, "PE", "SELL", row.pe_ltp)}
-                          className="text-[9px] px-1 rounded font-bold" style={{ background: "#f0306020", color: "#f03060" }}>S</button>
+                          className="text-xs px-1.5 rounded font-bold" style={{ background: theme.accent.red + "20", color: theme.accent.red }}>S</button>
                       </div>
                     )}
                   </div>
-                  <div style={{ color: "#f0306077" }}>{row.pe_iv ? row.pe_iv.toFixed(1) + "%" : "-"}</div>
-                  <div style={{ color: "#f0306088" }}>{fmtOI(row.pe_oi)}</div>
+                  <div style={{ color: theme.text.faint }}>{row.pe_iv ? row.pe_iv.toFixed(1) + "%" : "-"}</div>
+                  <div style={{ color: theme.text.faint }}>{fmtOI(row.pe_oi)}</div>
                 </div>
               );
             })}
@@ -189,7 +191,7 @@ export default function OptionChain({ onSelect }: { onSelect?: OnSelect } = {}) 
         )}
 
         {!isLoading && rows.length === 0 && (
-          <div className="text-center py-16" style={{ color: "#445566" }}>
+          <div className="text-center py-16" style={{ color: theme.text.muted }}>
             <div className="text-3xl mb-2">📭</div>
             <div className="text-sm">No data available</div>
           </div>
