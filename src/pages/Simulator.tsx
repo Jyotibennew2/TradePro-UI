@@ -79,6 +79,13 @@ export default function Simulator() {
     }
   }, [legs, effectiveSpot, daysToExpiry, r]);
 
+  // Auto-calculate payoff when legs change
+  useEffect(() => {
+    if (legs.length > 0) {
+      calculate();
+    }
+  }, [legs, calculate]);
+
   // ─── Portfolio Greeks ─────────────────────────────────────────────────────
   const portfolioGreeks: PortfolioGreeks = legs.reduce(
     (acc, leg) => {
