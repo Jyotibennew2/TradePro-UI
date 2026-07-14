@@ -16,8 +16,10 @@ import LegRow         from "../simulator/components/LegRow";
 import Card           from "../components/ui/Card";
 import OptionChain    from "./OptionChain";
 import { Plus, LayoutGrid, BarChart2, Activity, RefreshCw } from "lucide-react";
+import { useTheme } from "../store/themeStore";
 
 export default function Workspace() {
+  const theme = useTheme();
   const { nifty, bankNifty } = useAppStore();
   const store = useSimulatorStore();
   const {
@@ -89,18 +91,18 @@ export default function Workspace() {
 
       {/* Quick-nav icon rail */}
       <div className="flex flex-col gap-3 py-4 px-2 border-r shrink-0"
-        style={{ borderColor: "#0f1e36", background: "#060c1a" }}>
+        style={{ borderColor: theme.border.subtle, background: theme.bg.surface }}>
         <button onClick={() => scrollTo(chainRef)} title="Option Chain + Builder"
-          className="p-2 rounded-lg" style={{ background: "#0f1e36", color: "#00c8f0" }}>
-          <LayoutGrid size={16} />
+          className="p-2.5 rounded-lg" style={{ background: theme.border.subtle, color: theme.accent.cyan }}>
+          <LayoutGrid size={20} />
         </button>
         <button onClick={() => scrollTo(payoffRef)} title="Payoff"
-          className="p-2 rounded-lg" style={{ background: "#0f1e36", color: "#00c8f0" }}>
-          <BarChart2 size={16} />
+          className="p-2.5 rounded-lg" style={{ background: theme.border.subtle, color: theme.accent.cyan }}>
+          <BarChart2 size={20} />
         </button>
         <button onClick={() => scrollTo(greeksRef)} title="Greeks"
-          className="p-2 rounded-lg" style={{ background: "#0f1e36", color: "#00c8f0" }}>
-          <Activity size={16} />
+          className="p-2.5 rounded-lg" style={{ background: theme.border.subtle, color: theme.accent.cyan }}>
+          <Activity size={20} />
         </button>
       </div>
 
@@ -108,7 +110,7 @@ export default function Workspace() {
       <div className="flex-1 overflow-y-auto">
 
         {/* ── Section 1: Option Chain + Strategy Builder ── */}
-        <div ref={chainRef} className="p-3 border-b" style={{ borderColor: "#0f1e36" }}>
+        <div ref={chainRef} className="p-3 border-b" style={{ borderColor: theme.border.subtle }}>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
 
             <div className="min-w-0">
@@ -124,13 +126,13 @@ export default function Workspace() {
             <div className="min-w-0 space-y-3">
               <Card title="Add Legs">
                 <div className="grid grid-cols-2 gap-2">
-                  {([["CE","BUY","#00d97e"],["CE","SELL","#f03060"],["PE","BUY","#00c8f0"],["PE","SELL","#9b5cf6"]] as const).map(
+                  {([["CE","BUY",theme.accent.green],["CE","SELL",theme.accent.red],["PE","BUY",theme.accent.cyan],["PE","SELL",theme.accent.purple]] as const).map(
                     ([type, action, color]) => (
                       <button key={`${action}-${type}`}
                         onClick={() => addCustomLeg(type, action)}
-                        className="py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1"
+                        className="py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-1"
                         style={{ background: color + "15", color, border: `1px solid ${color}30` }}>
-                        <Plus size={11} /> {action} {type}
+                        <Plus size={14} /> {action} {type}
                       </button>
                     )
                   )}
@@ -140,9 +142,9 @@ export default function Workspace() {
               {legs.length > 0 ? (
                 <Card title={`Legs (${legs.length})`} extra={
                   <button onClick={calculate}
-                    className="text-xs px-2 py-0.5 rounded flex items-center gap-1"
-                    style={{ color: "#00c8f0", background: "#00c8f015" }}>
-                    <RefreshCw size={10} /> Calculate
+                    className="text-sm px-2 py-0.5 rounded flex items-center gap-1"
+                    style={{ color: theme.accent.cyan, background: theme.accent.cyan + "15" }}>
+                    <RefreshCw size={13} /> Calculate
                   </button>
                 }>
                   {legs.map((leg, i) => (
@@ -157,9 +159,9 @@ export default function Workspace() {
                   ))}
                 </Card>
               ) : (
-                <div className="text-center py-8" style={{ color: "#445566" }}>
+                <div className="text-center py-8" style={{ color: theme.text.muted }}>
                   <div className="text-2xl mb-1">📊</div>
-                  <div className="text-xs">Chain se dekh kar ya buttons se legs add kariye</div>
+                  <div className="text-sm">Chain se dekh kar ya buttons se legs add kariye</div>
                 </div>
               )}
             </div>
@@ -167,13 +169,13 @@ export default function Workspace() {
         </div>
 
         {/* ── Section 2: Payoff ── */}
-        <div ref={payoffRef} className="p-3 border-b" style={{ borderColor: "#0f1e36" }}>
+        <div ref={payoffRef} className="p-3 border-b" style={{ borderColor: theme.border.subtle }}>
           {payoff ? (
             <Card title="Payoff Diagram">
               <PayoffChart result={payoff} spot={effectiveSpot} showPerLeg={false} />
             </Card>
           ) : (
-            <div className="text-center py-10" style={{ color: "#445566" }}>
+            <div className="text-center py-10" style={{ color: theme.text.muted }}>
               <div className="text-3xl mb-2">📈</div>
               <div className="text-sm">Legs add karke "Calculate" dabaiye</div>
             </div>
@@ -187,7 +189,7 @@ export default function Workspace() {
               <GreeksDisplay greeks={portfolioGreeks} />
             </Card>
           ) : (
-            <div className="text-center py-10" style={{ color: "#445566" }}>
+            <div className="text-center py-10" style={{ color: theme.text.muted }}>
               <div className="text-3xl mb-2">🧮</div>
               <div className="text-sm">Legs add karke Greeks dekhein</div>
             </div>
