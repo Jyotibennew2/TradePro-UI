@@ -12,6 +12,7 @@ import Settings   from "./pages/Settings";
 import Simulator  from "./pages/Simulator";
 import Backtest     from "./pages/Backtest";
 import AIAssistant from "./pages/AIAssistant";
+import Workspace  from "./pages/Workspace";
 import Screener2 from "./pages/Screener";
 
 const qc = new QueryClient({
@@ -53,6 +54,7 @@ export default function App() {
                 <Route path="/simulator" element={<Simulator  />} />
                 <Route path="/backtest"  element={<Backtest   />} />
                 <Route path="/ai"        element={<AIAssistant />} />
+                <Route path="/workspace" element={<Workspace  />} />
                 <Route path="/screener2" element={<Screener2 />} />
               </Routes>
             </main>
