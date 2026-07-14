@@ -2,9 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchHealth, fetchFunds } from "../utils/api";
 import Card from "../components/ui/Card";
 import Badge from "../components/ui/Badge";
-import { Server, Database, Clock, Shield } from "lucide-react";
+import { Server, Database, Clock, Shield, Sun, Moon } from "lucide-react";
+import { useTheme, useThemeStore } from "../store/themeStore";
 
 export default function Settings() {
+  const theme = useTheme();
+  const { mode, toggle } = useThemeStore();
   const health = useQuery({ queryKey: ["health"], queryFn: fetchHealth, refetchInterval: 10000 });
   const funds  = useQuery({ queryKey: ["funds"],  queryFn: fetchFunds,  refetchInterval: 30000 });
 
@@ -16,6 +19,18 @@ export default function Settings() {
 
   return (
     <div className="p-4 space-y-4">
+      {/* Appearance */}
+      <Card title="Appearance">
+        <div className="flex items-center justify-between py-1">
+          <span className="text-sm" style={{ color: theme.text.muted }}>Theme</span>
+          <button onClick={toggle}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold"
+            style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.text.secondary }}>
+            {mode === "light" ? <><Sun size={16} /> Light</> : <><Moon size={16} /> Dark</>}
+          </button>
+        </div>
+      </Card>
+
       {/* Server Status */}
       <Card title="Server Status">
         <div className="space-y-3">
@@ -26,9 +41,9 @@ export default function Settings() {
             { label: "Version",       value: h?.version ?? "---",                 ok: true             },
           ].map(({ label, value, ok }) => (
             <div key={label} className="flex items-center justify-between py-1 border-b"
-              style={{ borderColor: "#0f1e36" }}>
-              <span className="text-xs" style={{ color: "#445566" }}>{label}</span>
-              <span className="text-xs font-bold" style={{ color: ok ? "#00d97e" : "#f03060" }}>
+              style={{ borderColor: theme.border.subtle }}>
+              <span className="text-sm" style={{ color: theme.text.muted }}>{label}</span>
+              <span className="text-sm font-bold" style={{ color: ok ? theme.accent.green : theme.accent.red }}>
                 {value}
               </span>
             </div>
@@ -39,18 +54,18 @@ export default function Settings() {
       {/* Funds */}
       <Card title="Account Funds">
         {funds.isLoading ? (
-          <div className="text-xs text-center" style={{ color: "#445566" }}>Loading...</div>
+          <div className="text-sm text-center" style={{ color: theme.text.muted }}>Loading...</div>
         ) : (
           <div className="space-y-2">
             {[
-              { label: "Total Balance", value: f?.total,     color: "#c0d0e8" },
-              { label: "Used Margin",   value: f?.used,      color: "#f03060" },
-              { label: "Available",     value: f?.available, color: "#00d97e" },
+              { label: "Total Balance", value: f?.total,     color: theme.text.secondary },
+              { label: "Used Margin",   value: f?.used,      color: theme.accent.red },
+              { label: "Available",     value: f?.available, color: theme.accent.green },
             ].map(({ label, value, color }) => (
               <div key={label} className="flex items-center justify-between py-1 border-b"
-                style={{ borderColor: "#0f1e36" }}>
-                <span className="text-xs" style={{ color: "#445566" }}>{label}</span>
-                <span className="text-xs font-bold" style={{ color }}>₹{fmt(value)}</span>
+                style={{ borderColor: theme.border.subtle }}>
+                <span className="text-sm" style={{ color: theme.text.muted }}>{label}</span>
+                <span className="text-sm font-bold" style={{ color }}>₹{fmt(value)}</span>
               </div>
             ))}
           </div>
@@ -75,9 +90,9 @@ export default function Settings() {
             "/api/scheduler",
           ].map(ep => (
             <div key={ep} className="flex items-center justify-between py-1 border-b"
-              style={{ borderColor: "#0f1e36" }}>
-              <span className="text-xs font-mono" style={{ color: "#00c8f077" }}>{ep}</span>
-              <span className="text-xs" style={{ color: "#00d97e" }}>● Active</span>
+              style={{ borderColor: theme.border.subtle }}>
+              <span className="text-sm font-mono" style={{ color: theme.accent.cyan }}>{ep}</span>
+              <span className="text-sm" style={{ color: theme.accent.green }}>● Active</span>
             </div>
           ))}
         </div>
@@ -85,30 +100,30 @@ export default function Settings() {
 
       {/* App Info */}
       <Card title="App Info">
-        <div className="space-y-2 text-xs" style={{ color: "#445566" }}>
+        <div className="space-y-2 text-sm" style={{ color: theme.text.muted }}>
           <div className="flex justify-between">
             <span>Frontend</span>
-            <span style={{ color: "#c0d0e8" }}>React + Vite + TypeScript</span>
+            <span style={{ color: theme.text.secondary }}>React + Vite + TypeScript</span>
           </div>
           <div className="flex justify-between">
             <span>Backend</span>
-            <span style={{ color: "#c0d0e8" }}>Python Flask v3.0</span>
+            <span style={{ color: theme.text.secondary }}>Python Flask v3.0</span>
           </div>
           <div className="flex justify-between">
             <span>Broker</span>
-            <span style={{ color: "#c0d0e8" }}>Fyers API v3</span>
+            <span style={{ color: theme.text.secondary }}>Fyers API v3</span>
           </div>
           <div className="flex justify-between">
             <span>Styling</span>
-            <span style={{ color: "#c0d0e8" }}>TailwindCSS</span>
+            <span style={{ color: theme.text.secondary }}>TailwindCSS</span>
           </div>
           <div className="flex justify-between">
             <span>Charts</span>
-            <span style={{ color: "#c0d0e8" }}>Recharts</span>
+            <span style={{ color: theme.text.secondary }}>Recharts</span>
           </div>
           <div className="flex justify-between">
             <span>State</span>
-            <span style={{ color: "#c0d0e8" }}>Zustand + TanStack Query</span>
+            <span style={{ color: theme.text.secondary }}>Zustand + TanStack Query</span>
           </div>
         </div>
       </Card>
