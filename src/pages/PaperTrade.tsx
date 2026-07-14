@@ -7,10 +7,12 @@ import Badge from "../components/ui/Badge";
 import Loader from "../components/ui/Loader";
 import ErrorBox from "../components/ui/ErrorBox";
 import { PlusCircle, LogOut } from "lucide-react";
+import { useTheme } from "../store/themeStore";
 
 const SYMBOLS = ["NIFTY", "BANKNIFTY"];
 
 export default function PaperTrade() {
+  const theme = useTheme();
   const qc = useQueryClient();
   const { nifty, bankNifty } = useAppStore();
 
@@ -81,14 +83,14 @@ export default function PaperTrade() {
       {p && (
         <div className="grid grid-cols-2 gap-2">
           {[
-            { label: "Capital",    value: `₹${fmt(p.capital)}`,        color: "#c0d0e8" },
-            { label: "Available",  value: `₹${fmt(p.available)}`,      color: "#00d97e" },
-            { label: "Unrealized", value: `₹${fmt(p.unrealized_pnl)}`, color: p.unrealized_pnl >= 0 ? "#00d97e" : "#f03060" },
-            { label: "Realized",   value: `₹${fmt(p.realized_pnl)}`,   color: p.realized_pnl   >= 0 ? "#00d97e" : "#f03060" },
+            { label: "Capital",    value: `₹${fmt(p.capital)}`,        color: theme.text.secondary },
+            { label: "Available",  value: `₹${fmt(p.available)}`,      color: theme.accent.green },
+            { label: "Unrealized", value: `₹${fmt(p.unrealized_pnl)}`, color: p.unrealized_pnl >= 0 ? theme.accent.green : theme.accent.red },
+            { label: "Realized",   value: `₹${fmt(p.realized_pnl)}`,   color: p.realized_pnl   >= 0 ? theme.accent.green : theme.accent.red },
           ].map(({ label, value, color }) => (
             <div key={label} className="rounded-xl p-3 text-center"
-              style={{ background: "#090f1e", border: "1px solid #0f1e36" }}>
-              <div className="text-xs mb-1" style={{ color: "#445566" }}>{label}</div>
+              style={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}` }}>
+              <div className="text-sm mb-1" style={{ color: theme.text.muted }}>{label}</div>
               <div className="text-sm font-bold" style={{ color }}>{value}</div>
             </div>
           ))}
@@ -101,26 +103,26 @@ export default function PaperTrade() {
           {/* Symbol + Type */}
           <div className="flex gap-2">
             <div className="flex rounded-lg overflow-hidden flex-1"
-              style={{ border: "1px solid #0f1e36" }}>
+              style={{ border: `1px solid ${theme.border.subtle}` }}>
               {SYMBOLS.map(s => (
                 <button key={s} onClick={() => setSymbol(s)}
-                  className="flex-1 py-1.5 text-xs font-bold"
+                  className="flex-1 py-1.5 text-sm font-bold"
                   style={{
-                    background: symbol === s ? "#00c8f0" : "#090f1e",
-                    color     : symbol === s ? "#03050d" : "#445566",
+                    background: symbol === s ? theme.accent.cyan : theme.bg.surfaceAlt,
+                    color     : symbol === s ? theme.bg.page : theme.text.muted,
                   }}>
                   {s}
                 </button>
               ))}
             </div>
             <div className="flex rounded-lg overflow-hidden"
-              style={{ border: "1px solid #0f1e36" }}>
+              style={{ border: `1px solid ${theme.border.subtle}` }}>
               {["CE", "PE"].map(t => (
                 <button key={t} onClick={() => setOptType(t)}
-                  className="px-3 py-1.5 text-xs font-bold"
+                  className="px-3 py-1.5 text-sm font-bold"
                   style={{
-                    background: optType === t ? (t === "CE" ? "#00d97e" : "#f03060") : "#090f1e",
-                    color     : optType === t ? "#03050d" : "#445566",
+                    background: optType === t ? (t === "CE" ? theme.accent.green : theme.accent.red) : theme.bg.surfaceAlt,
+                    color     : optType === t ? theme.bg.page : theme.text.muted,
                   }}>
                   {t}
                 </button>
@@ -130,13 +132,13 @@ export default function PaperTrade() {
 
           {/* BUY / SELL */}
           <div className="flex rounded-lg overflow-hidden"
-            style={{ border: "1px solid #0f1e36" }}>
+            style={{ border: `1px solid ${theme.border.subtle}` }}>
             {["BUY", "SELL"].map(a => (
               <button key={a} onClick={() => setAction(a)}
-                className="flex-1 py-1.5 text-xs font-bold"
+                className="flex-1 py-1.5 text-sm font-bold"
                 style={{
-                  background: action === a ? (a === "BUY" ? "#00d97e" : "#f03060") : "#090f1e",
-                  color     : action === a ? "#03050d" : "#445566",
+                  background: action === a ? (a === "BUY" ? theme.accent.green : theme.accent.red) : theme.bg.surfaceAlt,
+                  color     : action === a ? theme.bg.page : theme.text.muted,
                 }}>
                 {a}
               </button>
@@ -144,8 +146,8 @@ export default function PaperTrade() {
           </div>
 
           {/* Spot display */}
-          <div className="text-xs text-center" style={{ color: "#445566" }}>
-            {symbol} Spot: <span style={{ color: "#00c8f0" }}>{ltp > 0 ? ltp.toLocaleString("en-IN") : "---"}</span>
+          <div className="text-sm text-center" style={{ color: theme.text.muted }}>
+            {symbol} Spot: <span style={{ color: theme.accent.cyan }}>{ltp > 0 ? ltp.toLocaleString("en-IN") : "---"}</span>
           </div>
 
           {/* Inputs */}
@@ -158,25 +160,25 @@ export default function PaperTrade() {
             { label: "Expiry",      value: expiry,     setter: setExpiry,     ph: "Optional"   },
           ].map(({ label, value, setter, ph }) => (
             <div key={label}>
-              <div className="text-xs mb-1" style={{ color: "#445566" }}>{label}</div>
+              <div className="text-sm mb-1" style={{ color: theme.text.muted }}>{label}</div>
               <input
                 type="text"
                 value={value}
                 onChange={e => setter(e.target.value)}
                 placeholder={ph}
-                className="w-full px-3 py-1.5 rounded-lg text-xs outline-none"
-                style={{ background: "#060c1a", border: "1px solid #0f1e36", color: "#c0d0e8" }}
+                className="w-full px-3 py-1.5 rounded-lg text-sm outline-none"
+                style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.text.secondary }}
               />
             </div>
           ))}
 
           {/* Message */}
           {msg && (
-            <div className="text-xs p-2 rounded-lg"
+            <div className="text-sm p-2 rounded-lg"
               style={{
-                background: msg.startsWith("✅") ? "#00d97e10" : "#f0306010",
-                color     : msg.startsWith("✅") ? "#00d97e"   : "#f03060",
-                border    : `1px solid ${msg.startsWith("✅") ? "#00d97e30" : "#f0306030"}`,
+                background: msg.startsWith("✅") ? theme.accent.green + "10" : theme.accent.red + "10",
+                color     : msg.startsWith("✅") ? theme.accent.green   : theme.accent.red,
+                border    : `1px solid ${msg.startsWith("✅") ? theme.accent.green + "30" : theme.accent.red + "30"}`,
               }}>
               {msg}
             </div>
@@ -186,11 +188,11 @@ export default function PaperTrade() {
           <button onClick={handlePlace} disabled={place.isPending}
             className="w-full py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2"
             style={{
-              background: action === "BUY" ? "#00d97e" : "#f03060",
-              color     : "#03050d",
+              background: action === "BUY" ? theme.accent.green : theme.accent.red,
+              color     : theme.bg.page,
               opacity   : place.isPending ? 0.7 : 1,
             }}>
-            <PlusCircle size={14} />
+            <PlusCircle size={16} />
             {place.isPending ? "Placing..." : `${action} ${symbol} ${optType}`}
           </button>
         </div>
@@ -202,25 +204,25 @@ export default function PaperTrade() {
           <div className="space-y-2">
             {p.open_positions.map((pos: any) => (
               <div key={pos.order_id} className="rounded-lg p-3"
-                style={{ background: "#060c1a", border: "1px solid #0f1e36" }}>
+                style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}` }}>
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-1">
-                    <span className="text-xs font-bold" style={{ color: "#c0d0e8" }}>
+                    <span className="text-sm font-bold" style={{ color: theme.text.secondary }}>
                       {pos.symbol} {pos.strike} {pos.option_type}
                     </span>
                     <Badge label={pos.action} variant={pos.action.toLowerCase() as "buy" | "sell"} />
                   </div>
                   <button
                     onClick={() => exit.mutate({ id: pos.order_id, price: pos.entry_price })}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded text-xs"
-                    style={{ background: "#f0306020", color: "#f03060" }}>
-                    <LogOut size={10} /> Exit
+                    className="flex items-center gap-1 px-2 py-0.5 rounded text-sm"
+                    style={{ background: theme.accent.red + "20", color: theme.accent.red }}>
+                    <LogOut size={13} /> Exit
                   </button>
                 </div>
-                <div className="grid grid-cols-3 gap-1 text-xs" style={{ color: "#445566" }}>
-                  <span>Qty: <span style={{ color: "#c0d0e8" }}>{pos.qty}</span></span>
-                  <span>Entry: <span style={{ color: "#c0d0e8" }}>₹{pos.entry_price}</span></span>
-                  <span style={{ color: pos.mtm >= 0 ? "#00d97e" : "#f03060" }}>
+                <div className="grid grid-cols-3 gap-1 text-sm" style={{ color: theme.text.muted }}>
+                  <span>Qty: <span style={{ color: theme.text.secondary }}>{pos.qty}</span></span>
+                  <span>Entry: <span style={{ color: theme.text.secondary }}>₹{pos.entry_price}</span></span>
+                  <span style={{ color: pos.mtm >= 0 ? theme.accent.green : theme.accent.red }}>
                     MTM: ₹{pos.mtm?.toFixed(1) ?? 0}
                   </span>
                 </div>
