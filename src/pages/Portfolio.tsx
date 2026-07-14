@@ -3,9 +3,11 @@ import { fetchPortfolio } from "../utils/api";
 import Card from "../components/ui/Card";
 import Loader from "../components/ui/Loader";
 import ErrorBox from "../components/ui/ErrorBox";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { PieChart, Pie, Cell } from "recharts";
+import { useTheme } from "../store/themeStore";
 
 export default function Portfolio() {
+  const theme = useTheme();
   const { data, isLoading, isError } = useQuery({
     queryKey      : ["portfolio"],
     queryFn       : fetchPortfolio,
@@ -16,8 +18,8 @@ export default function Portfolio() {
   const fmt = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
   const pieData = p ? [
-    { name: "Available",  value: Math.max(p.available,      0), color: "#00d97e" },
-    { name: "Used Margin",value: Math.max(p.used_margin,    0), color: "#f03060" },
+    { name: "Available",  value: Math.max(p.available,      0), color: theme.accent.green },
+    { name: "Used Margin",value: Math.max(p.used_margin,    0), color: theme.accent.red },
   ] : [];
 
   const pnlData = p ? [
@@ -35,14 +37,14 @@ export default function Portfolio() {
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-2">
         {[
-          { label: "Capital",     value: `₹${fmt(p.capital)}`,        color: "#c0d0e8" },
-          { label: "Available",   value: `₹${fmt(p.available)}`,      color: "#00d97e" },
-          { label: "Used Margin", value: `₹${fmt(p.used_margin)}`,    color: "#f03060" },
-          { label: "Open Trades", value: `${p.open_count}`,           color: "#00c8f0" },
+          { label: "Capital",     value: `₹${fmt(p.capital)}`,        color: theme.text.secondary },
+          { label: "Available",   value: `₹${fmt(p.available)}`,      color: theme.accent.green },
+          { label: "Used Margin", value: `₹${fmt(p.used_margin)}`,    color: theme.accent.red },
+          { label: "Open Trades", value: `${p.open_count}`,           color: theme.accent.cyan },
         ].map(({ label, value, color }) => (
           <div key={label} className="rounded-xl p-3 text-center"
-            style={{ background: "#090f1e", border: "1px solid #0f1e36" }}>
-            <div className="text-xs mb-1" style={{ color: "#445566" }}>{label}</div>
+            style={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}` }}>
+            <div className="text-sm mb-1" style={{ color: theme.text.muted }}>{label}</div>
             <div className="text-base font-black" style={{ color }}>{value}</div>
           </div>
         ))}
@@ -53,9 +55,9 @@ export default function Portfolio() {
         <div className="grid grid-cols-3 gap-2 text-center">
           {pnlData.map(({ name, value }) => (
             <div key={name}>
-              <div className="text-xs mb-1" style={{ color: "#445566" }}>{name}</div>
+              <div className="text-sm mb-1" style={{ color: theme.text.muted }}>{name}</div>
               <div className="text-sm font-bold"
-                style={{ color: value >= 0 ? "#00d97e" : "#f03060" }}>
+                style={{ color: value >= 0 ? theme.accent.green : theme.accent.red }}>
                 {value >= 0 ? "+" : ""}₹{fmt(value)}
               </div>
             </div>
@@ -83,9 +85,9 @@ export default function Portfolio() {
             </PieChart>
             <div className="space-y-2">
               {pieData.map(({ name, value, color }) => (
-                <div key={name} className="flex items-center gap-2 text-xs">
-                  <div className="w-2 h-2 rounded-full" style={{ background: color }} />
-                  <span style={{ color: "#445566" }}>{name}</span>
+                <div key={name} className="flex items-center gap-2 text-sm">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
+                  <span style={{ color: theme.text.muted }}>{name}</span>
                   <span style={{ color }}>₹{fmt(value)}</span>
                 </div>
               ))}
@@ -100,22 +102,22 @@ export default function Portfolio() {
           <div className="space-y-2">
             {p.open_positions.map((pos: any) => (
               <div key={pos.order_id} className="rounded-lg p-3"
-                style={{ background: "#060c1a", border: "1px solid #0f1e36" }}>
+                style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}` }}>
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-xs font-bold" style={{ color: "#c0d0e8" }}>
+                    <div className="text-sm font-bold" style={{ color: theme.text.secondary }}>
                       {pos.symbol} {pos.strike} {pos.option_type}
                     </div>
-                    <div className="text-xs mt-0.5" style={{ color: "#445566" }}>
+                    <div className="text-sm mt-0.5" style={{ color: theme.text.muted }}>
                       {pos.action} • Qty: {pos.qty} • Entry: ₹{pos.entry_price}
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-xs font-bold"
-                      style={{ color: (pos.mtm ?? 0) >= 0 ? "#00d97e" : "#f03060" }}>
+                    <div className="text-sm font-bold"
+                      style={{ color: (pos.mtm ?? 0) >= 0 ? theme.accent.green : theme.accent.red }}>
                       ₹{fmt(pos.mtm ?? 0)}
                     </div>
-                    <div className="text-xs mt-0.5" style={{ color: "#445566" }}>MTM</div>
+                    <div className="text-sm mt-0.5" style={{ color: theme.text.muted }}>MTM</div>
                   </div>
                 </div>
               </div>
@@ -125,10 +127,10 @@ export default function Portfolio() {
       )}
 
       {p.open_positions.length === 0 && (
-        <div className="text-center py-10" style={{ color: "#445566" }}>
+        <div className="text-center py-10" style={{ color: theme.text.muted }}>
           <div className="text-3xl mb-2">💼</div>
           <div className="text-sm">No open positions</div>
-          <div className="text-xs mt-1">Go to Paper Trade to place orders</div>
+          <div className="text-sm mt-1">Go to Paper Trade to place orders</div>
         </div>
       )}
     </div>
