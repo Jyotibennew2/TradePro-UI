@@ -8,6 +8,8 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, ReferenceLine,
 } from "recharts";
+import { useTheme } from "../store/themeStore";
+import type { Theme } from "../styles/theme";
 
 const STRATEGIES = [
   { key: "straddle",   label: "Short Straddle"  },
@@ -17,19 +19,20 @@ const STRATEGIES = [
   { key: "longPut",    label: "Long Put"         },
 ];
 
-const COLORS = ["#00c8f0", "#f0a030", "#9b5cf6", "#f03060", "#00d97e"];
-
-function StatBox({ label, value, color = "#c0d0e8" }: { label: string; value: string; color?: string }) {
+function StatBox({ label, value, color, theme }: { label: string; value: string; color: string; theme: Theme }) {
   return (
     <div className="rounded-xl p-3 text-center"
-      style={{ background: "#090f1e", border: "1px solid #0f1e36" }}>
-      <div className="text-xs mb-1" style={{ color: "#445566" }}>{label}</div>
+      style={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}` }}>
+      <div className="text-sm mb-1" style={{ color: theme.text.muted }}>{label}</div>
       <div className="text-sm font-black" style={{ color }}>{value}</div>
     </div>
   );
 }
 
 export default function Backtest() {
+  const theme = useTheme();
+  const COLORS = [theme.accent.cyan, theme.accent.orange, theme.accent.purple, theme.accent.red, theme.accent.green];
+
   const [mode, setMode] = useState<"single" | "compare">("single");
 
   // Shared params
@@ -110,20 +113,20 @@ export default function Backtest() {
       {/* Mode toggle */}
       <div className="flex gap-1">
         <button onClick={() => setMode("single")}
-          className="flex-1 py-2 rounded-xl text-xs font-bold"
+          className="flex-1 py-2 rounded-xl text-sm font-bold"
           style={{
-            background: mode === "single" ? "#00c8f0" : "#090f1e",
-            color     : mode === "single" ? "#03050d" : "#445566",
-            border    : "1px solid #0f1e36",
+            background: mode === "single" ? theme.accent.cyan : theme.bg.surfaceAlt,
+            color     : mode === "single" ? theme.bg.page : theme.text.muted,
+            border    : `1px solid ${theme.border.subtle}`,
           }}>
           Single Backtest
         </button>
         <button onClick={() => setMode("compare")}
-          className="flex-1 py-2 rounded-xl text-xs font-bold"
+          className="flex-1 py-2 rounded-xl text-sm font-bold"
           style={{
-            background: mode === "compare" ? "#00c8f0" : "#090f1e",
-            color     : mode === "compare" ? "#03050d" : "#445566",
-            border    : "1px solid #0f1e36",
+            background: mode === "compare" ? theme.accent.cyan : theme.bg.surfaceAlt,
+            color     : mode === "compare" ? theme.bg.page : theme.text.muted,
+            border    : `1px solid ${theme.border.subtle}`,
           }}>
           Compare Strategies
         </button>
@@ -135,15 +138,15 @@ export default function Backtest() {
 
           {mode === "single" && (
             <div>
-              <div className="text-xs mb-1" style={{ color: "#334455" }}>Strategy</div>
+              <div className="text-sm mb-1" style={{ color: theme.text.muted }}>Strategy</div>
               <div className="flex flex-wrap gap-1">
                 {STRATEGIES.map(st => (
                   <button key={st.key} onClick={() => setStrategy(st.key)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-bold"
+                    className="px-3 py-1.5 rounded-lg text-sm font-bold"
                     style={{
-                      background: strategy === st.key ? "#00c8f0" : "#090f1e",
-                      color     : strategy === st.key ? "#03050d" : "#445566",
-                      border    : "1px solid #0f1e36",
+                      background: strategy === st.key ? theme.accent.cyan : theme.bg.surfaceAlt,
+                      color     : strategy === st.key ? theme.bg.page : theme.text.muted,
+                      border    : `1px solid ${theme.border.subtle}`,
                     }}>
                     {st.label}
                   </button>
@@ -154,7 +157,7 @@ export default function Backtest() {
 
           {mode === "compare" && (
             <div>
-              <div className="text-xs mb-1" style={{ color: "#334455" }}>
+              <div className="text-sm mb-1" style={{ color: theme.text.muted }}>
                 Select 2+ strategies to compare
               </div>
               <div className="flex flex-wrap gap-1">
@@ -162,11 +165,11 @@ export default function Backtest() {
                   const on = selected.includes(st.key);
                   return (
                     <button key={st.key} onClick={() => toggleSelected(st.key)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1"
+                      className="px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1"
                       style={{
-                        background: on ? `${COLORS[i % COLORS.length]}20` : "#090f1e",
-                        color     : on ? COLORS[i % COLORS.length] : "#445566",
-                        border    : `1px solid ${on ? COLORS[i % COLORS.length] : "#0f1e36"}`,
+                        background: on ? `${COLORS[i % COLORS.length]}20` : theme.bg.surfaceAlt,
+                        color     : on ? COLORS[i % COLORS.length] : theme.text.muted,
+                        border    : `1px solid ${on ? COLORS[i % COLORS.length] : theme.border.subtle}`,
                       }}>
                       {on && <span style={{ width: 6, height: 6, borderRadius: 99, background: COLORS[i % COLORS.length] }} />}
                       {st.label}
@@ -185,7 +188,7 @@ export default function Backtest() {
               { label: "Lot Size", value: lotSize, setter: setLotSize, min: 1,   max: 500 },
             ].map(({ label, value, setter, min, max }) => (
               <div key={label}>
-                <div className="text-xs mb-1" style={{ color: "#334455" }}>{label}: <span style={{ color: "#00c8f0" }}>{value}</span></div>
+                <div className="text-sm mb-1" style={{ color: theme.text.muted }}>{label}: <span style={{ color: theme.accent.cyan }}>{value}</span></div>
                 <input type="range" min={min} max={max} value={value}
                   onChange={e => setter(Number(e.target.value))}
                   className="w-full" />
@@ -197,7 +200,7 @@ export default function Backtest() {
             <button onClick={runSingle}
               disabled={isPending}
               className="w-full py-2.5 rounded-xl text-sm font-black"
-              style={{ background: "#00c8f0", color: "#03050d", opacity: isPending ? 0.7 : 1 }}>
+              style={{ background: theme.accent.cyan, color: theme.bg.page, opacity: isPending ? 0.7 : 1 }}>
               {isPending ? "Running Backtest..." : "▶ Run Backtest"}
             </button>
           ) : (
@@ -205,8 +208,8 @@ export default function Backtest() {
               disabled={isComparing || selected.length < 2}
               className="w-full py-2.5 rounded-xl text-sm font-black"
               style={{
-                background: "#00c8f0",
-                color     : "#03050d",
+                background: theme.accent.cyan,
+                color     : theme.bg.page,
                 opacity   : (isComparing || selected.length < 2) ? 0.5 : 1,
               }}>
               {isComparing ? "Comparing..." : selected.length < 2 ? "Select 2+ strategies" : "▶ Run Comparison"}
@@ -224,14 +227,14 @@ export default function Backtest() {
           {s && (
             <>
               <div className="grid grid-cols-2 gap-2">
-                <StatBox label="Total Trades" value={`${s.total}`}                          color="#c0d0e8" />
-                <StatBox label="Win Rate"     value={fmtPct(s.win_rate)}                    color={s.win_rate >= 50 ? "#00d97e" : "#f03060"} />
-                <StatBox label="Total P&L"   value={`₹${fmt(s.total_pnl)}`}               color={s.total_pnl >= 0 ? "#00d97e" : "#f03060"} />
-                <StatBox label="Max Drawdown" value={`₹${fmt(Math.abs(s.max_drawdown))}`}  color="#f03060" />
-                <StatBox label="Avg Win"      value={`₹${fmt(s.avg_win)}`}                 color="#00d97e" />
-                <StatBox label="Avg Loss"     value={`₹${fmt(Math.abs(s.avg_loss))}`}      color="#f03060" />
-                <StatBox label="Profit Factor" value={`${s.profit_factor}x`}               color={s.profit_factor >= 1 ? "#00d97e" : "#f03060"} />
-                <StatBox label="Sharpe"       value={`${s.sharpe}`}                        color={s.sharpe >= 1 ? "#00d97e" : "#f0a030"} />
+                <StatBox theme={theme} label="Total Trades" value={`${s.total}`}                          color={theme.text.secondary} />
+                <StatBox theme={theme} label="Win Rate"     value={fmtPct(s.win_rate)}                    color={s.win_rate >= 50 ? theme.accent.green : theme.accent.red} />
+                <StatBox theme={theme} label="Total P&L"   value={`₹${fmt(s.total_pnl)}`}               color={s.total_pnl >= 0 ? theme.accent.green : theme.accent.red} />
+                <StatBox theme={theme} label="Max Drawdown" value={`₹${fmt(Math.abs(s.max_drawdown))}`}  color={theme.accent.red} />
+                <StatBox theme={theme} label="Avg Win"      value={`₹${fmt(s.avg_win)}`}                 color={theme.accent.green} />
+                <StatBox theme={theme} label="Avg Loss"     value={`₹${fmt(Math.abs(s.avg_loss))}`}      color={theme.accent.red} />
+                <StatBox theme={theme} label="Profit Factor" value={`${s.profit_factor}x`}               color={s.profit_factor >= 1 ? theme.accent.green : theme.accent.red} />
+                <StatBox theme={theme} label="Sharpe"       value={`${s.sharpe}`}                        color={s.sharpe >= 1 ? theme.accent.green : theme.accent.orange} />
               </div>
 
               <Card title="Equity Curve">
@@ -239,16 +242,16 @@ export default function Backtest() {
                   <AreaChart data={data.equity_curve}>
                     <defs>
                       <linearGradient id="eqGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor="#00c8f0" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#00c8f0" stopOpacity={0}   />
+                        <stop offset="5%"  stopColor={theme.accent.cyan} stopOpacity={0.3} />
+                        <stop offset="95%" stopColor={theme.accent.cyan} stopOpacity={0}   />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid stroke="#0f1e36" strokeDasharray="3 3" />
-                    <XAxis dataKey="date" tick={{ fill: "#445566", fontSize: 9 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-                    <YAxis tick={{ fill: "#445566", fontSize: 9 }} tickFormatter={v => `₹${(v/1000).toFixed(0)}k`} axisLine={false} tickLine={false} width={40} />
-                    <Tooltip contentStyle={{ background: "#060c1a", border: "1px solid #0f1e36", borderRadius: 8, fontSize: 11 }} formatter={(v: number) => [`₹${fmt(v)}`, "Equity"]} />
-                    <ReferenceLine y={0} stroke="#334455" strokeDasharray="4 4" />
-                    <Area type="monotone" dataKey="equity" stroke="#00c8f0" strokeWidth={2} fill="url(#eqGrad)" dot={false} />
+                    <CartesianGrid stroke={theme.border.subtle} strokeDasharray="3 3" />
+                    <XAxis dataKey="date" tick={{ fill: theme.text.muted, fontSize: 11 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                    <YAxis tick={{ fill: theme.text.muted, fontSize: 11 }} tickFormatter={v => `₹${(v/1000).toFixed(0)}k`} axisLine={false} tickLine={false} width={44} />
+                    <Tooltip contentStyle={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, borderRadius: 8, fontSize: 13 }} formatter={(v: number) => [`₹${fmt(v)}`, "Equity"]} />
+                    <ReferenceLine y={0} stroke={theme.text.faint} strokeDasharray="4 4" />
+                    <Area type="monotone" dataKey="equity" stroke={theme.accent.cyan} strokeWidth={2} fill="url(#eqGrad)" dot={false} />
                   </AreaChart>
                 </ResponsiveContainer>
               </Card>
@@ -256,14 +259,14 @@ export default function Backtest() {
               <Card title="Trade P&L">
                 <ResponsiveContainer width="100%" height={150}>
                   <BarChart data={data.trades.slice(-30)}>
-                    <CartesianGrid stroke="#0f1e36" strokeDasharray="3 3" />
-                    <XAxis dataKey="date" tick={{ fill: "#445566", fontSize: 8 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: "#445566", fontSize: 9 }} tickFormatter={v => `₹${(v/1000).toFixed(0)}k`} axisLine={false} tickLine={false} width={36} />
-                    <Tooltip contentStyle={{ background: "#060c1a", border: "1px solid #0f1e36", borderRadius: 8, fontSize: 11 }} formatter={(v: number) => [`₹${fmt(v)}`, "P&L"]} />
-                    <ReferenceLine y={0} stroke="#334455" />
+                    <CartesianGrid stroke={theme.border.subtle} strokeDasharray="3 3" />
+                    <XAxis dataKey="date" tick={{ fill: theme.text.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: theme.text.muted, fontSize: 11 }} tickFormatter={v => `₹${(v/1000).toFixed(0)}k`} axisLine={false} tickLine={false} width={40} />
+                    <Tooltip contentStyle={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, borderRadius: 8, fontSize: 13 }} formatter={(v: number) => [`₹${fmt(v)}`, "P&L"]} />
+                    <ReferenceLine y={0} stroke={theme.text.faint} />
                     <Bar dataKey="pnl" radius={[2, 2, 0, 0]}
                       // @ts-ignore
-                      fill={(entry: any) => entry.win ? "#00d97e" : "#f03060"} />
+                      fill={(entry: any) => entry.win ? theme.accent.green : theme.accent.red} />
                   </BarChart>
                 </ResponsiveContainer>
               </Card>
@@ -271,11 +274,11 @@ export default function Backtest() {
               <Card title={`Recent Trades (${data.trades.length})`}>
                 <div className="space-y-1 max-h-60 overflow-y-auto">
                   {[...data.trades].reverse().slice(0, 20).map((t: any, i: number) => (
-                    <div key={i} className="flex items-center justify-between text-xs py-1 border-b" style={{ borderColor: "#0f1e3640" }}>
-                      <span style={{ color: "#445566" }}>{t.date}</span>
-                      <span style={{ color: "#c0d0e8" }}>₹{fmt(t.spot)}</span>
-                      <span style={{ color: "#9b5cf6" }}>IV: {t.iv}%</span>
-                      <span style={{ color: t.win ? "#00d97e" : "#f03060", fontWeight: 700 }}>
+                    <div key={i} className="flex items-center justify-between text-sm py-1 border-b" style={{ borderColor: theme.border.subtle }}>
+                      <span style={{ color: theme.text.muted }}>{t.date}</span>
+                      <span style={{ color: theme.text.secondary }}>₹{fmt(t.spot)}</span>
+                      <span style={{ color: theme.accent.purple }}>IV: {t.iv}%</span>
+                      <span style={{ color: t.win ? theme.accent.green : theme.accent.red, fontWeight: 700 }}>
                         {t.pnl >= 0 ? "+" : ""}₹{fmt(t.pnl)}
                       </span>
                     </div>
@@ -286,10 +289,10 @@ export default function Backtest() {
           )}
 
           {!data && !isPending && (
-            <div className="text-center py-16" style={{ color: "#445566" }}>
+            <div className="text-center py-16" style={{ color: theme.text.muted }}>
               <div className="text-4xl mb-3">📊</div>
               <div className="text-sm">Configure and run backtest</div>
-              <div className="text-xs mt-1" style={{ color: "#334455" }}>Simulates strategy over historical data</div>
+              <div className="text-sm mt-1" style={{ color: theme.text.faint }}>Simulates strategy over historical data</div>
             </div>
           )}
         </>
@@ -305,9 +308,9 @@ export default function Backtest() {
             <>
               <Card title="Strategy Comparison">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
+                  <table className="w-full text-sm">
                     <thead>
-                      <tr style={{ color: "#445566" }}>
+                      <tr style={{ color: theme.text.muted }}>
                         <th className="text-left  py-1">Strategy</th>
                         <th className="text-right py-1">Total P&L</th>
                         <th className="text-right py-1">Win %</th>
@@ -320,16 +323,16 @@ export default function Backtest() {
                       {compareResults.map((r, i) => {
                         const rs = r.data.summary;
                         return (
-                          <tr key={r.key} style={{ borderTop: "1px solid #0f1e3640" }}>
+                          <tr key={r.key} style={{ borderTop: `1px solid ${theme.border.subtle}` }}>
                             <td className="py-1.5 font-bold flex items-center gap-1" style={{ color: COLORS[i % COLORS.length] }}>
                               <span style={{ width: 6, height: 6, borderRadius: 99, background: COLORS[i % COLORS.length], display: "inline-block" }} />
                               {r.label}
                             </td>
-                            <td className="text-right" style={{ color: rs.total_pnl >= 0 ? "#00d97e" : "#f03060" }}>₹{fmt(rs.total_pnl)}</td>
-                            <td className="text-right" style={{ color: "#c0d0e8" }}>{fmtPct(rs.win_rate)}</td>
-                            <td className="text-right" style={{ color: "#f03060" }}>₹{fmt(Math.abs(rs.max_drawdown))}</td>
-                            <td className="text-right" style={{ color: "#c0d0e8" }}>{rs.sharpe}</td>
-                            <td className="text-right" style={{ color: "#c0d0e8" }}>{rs.profit_factor}x</td>
+                            <td className="text-right" style={{ color: rs.total_pnl >= 0 ? theme.accent.green : theme.accent.red }}>₹{fmt(rs.total_pnl)}</td>
+                            <td className="text-right" style={{ color: theme.text.secondary }}>{fmtPct(rs.win_rate)}</td>
+                            <td className="text-right" style={{ color: theme.accent.red }}>₹{fmt(Math.abs(rs.max_drawdown))}</td>
+                            <td className="text-right" style={{ color: theme.text.secondary }}>{rs.sharpe}</td>
+                            <td className="text-right" style={{ color: theme.text.secondary }}>{rs.profit_factor}x</td>
                           </tr>
                         );
                       })}
@@ -341,12 +344,12 @@ export default function Backtest() {
               <Card title="Equity Curve Comparison">
                 <ResponsiveContainer width="100%" height={220}>
                   <LineChart data={compareChartData}>
-                    <CartesianGrid stroke="#0f1e36" strokeDasharray="3 3" />
-                    <XAxis dataKey="i" tick={{ fill: "#445566", fontSize: 9 }} axisLine={false} tickLine={false} label={{ value: "Trade #", position: "insideBottom", fill: "#445566", fontSize: 9, dy: 10 }} />
-                    <YAxis tick={{ fill: "#445566", fontSize: 9 }} tickFormatter={v => `₹${(v/1000).toFixed(0)}k`} axisLine={false} tickLine={false} width={40} />
-                    <Tooltip contentStyle={{ background: "#060c1a", border: "1px solid #0f1e36", borderRadius: 8, fontSize: 11 }} formatter={(v: number) => [`₹${fmt(v)}`, ""]} />
-                    <Legend wrapperStyle={{ fontSize: 10 }} formatter={(key: string) => compareResults.find(r => r.key === key)?.label ?? key} />
-                    <ReferenceLine y={0} stroke="#334455" strokeDasharray="4 4" />
+                    <CartesianGrid stroke={theme.border.subtle} strokeDasharray="3 3" />
+                    <XAxis dataKey="i" tick={{ fill: theme.text.muted, fontSize: 11 }} axisLine={false} tickLine={false} label={{ value: "Trade #", position: "insideBottom", fill: theme.text.muted, fontSize: 11, dy: 10 }} />
+                    <YAxis tick={{ fill: theme.text.muted, fontSize: 11 }} tickFormatter={v => `₹${(v/1000).toFixed(0)}k`} axisLine={false} tickLine={false} width={44} />
+                    <Tooltip contentStyle={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, borderRadius: 8, fontSize: 13 }} formatter={(v: number) => [`₹${fmt(v)}`, ""]} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} formatter={(key: string) => compareResults.find(r => r.key === key)?.label ?? key} />
+                    <ReferenceLine y={0} stroke={theme.text.faint} strokeDasharray="4 4" />
                     {compareResults.map((r, i) => (
                       <Line key={r.key} type="monotone" dataKey={r.key} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={false} connectNulls />
                     ))}
@@ -357,10 +360,10 @@ export default function Backtest() {
           )}
 
           {!compareResults && !isComparing && (
-            <div className="text-center py-16" style={{ color: "#445566" }}>
+            <div className="text-center py-16" style={{ color: theme.text.muted }}>
               <div className="text-4xl mb-3">⚖️</div>
               <div className="text-sm">Select 2+ strategies and run comparison</div>
-              <div className="text-xs mt-1" style={{ color: "#334455" }}>See which strategy performed best historically</div>
+              <div className="text-sm mt-1" style={{ color: theme.text.faint }}>See which strategy performed best historically</div>
             </div>
           )}
         </>
