@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Card from "../components/ui/Card";
+import { useTheme } from "../store/themeStore";
 
 type View = "bullish" | "bearish" | "sideways" | "volatile";
 type Risk = "Defined Risk" | "Undefined Risk";
@@ -40,6 +41,7 @@ const VIEWS: { key: View; label: string; icon: string }[] = [
 ];
 
 export default function Screener() {
+  const theme = useTheme();
   const [view, setView] = useState<View>("sideways");
   const navigate = useNavigate();
 
@@ -54,9 +56,9 @@ export default function Screener() {
             <button key={v.key} onClick={() => setView(v.key)}
               className="py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
               style={{
-                background: view === v.key ? "#00c8f020" : "#090f1e",
-                color     : view === v.key ? "#00c8f0" : "#445566",
-                border    : `1px solid ${view === v.key ? "#00c8f0" : "#0f1e36"}`,
+                background: view === v.key ? theme.accent.cyan + "20" : theme.bg.surfaceAlt,
+                color     : view === v.key ? theme.accent.cyan : theme.text.muted,
+                border    : `1px solid ${view === v.key ? theme.accent.cyan : theme.border.subtle}`,
               }}>
               <span>{v.icon}</span> {v.label}
             </button>
@@ -66,20 +68,20 @@ export default function Screener() {
 
       {view === "volatile" ? (
         <Card title="Recommended Approach">
-          <div className="text-center py-8" style={{ color: "#445566" }}>
+          <div className="text-center py-8" style={{ color: theme.text.muted }}>
             <div className="text-3xl mb-2">⚡</div>
-            <div className="text-sm mb-2" style={{ color: "#c0d0e8" }}>
+            <div className="text-sm mb-2" style={{ color: theme.text.secondary }}>
               Volatile view ke liye Long Straddle / Long Strangle sabse best hai
               (bade move ka fayda, dono taraf).
             </div>
-            <div className="text-xs">
+            <div className="text-sm">
               Abhi ye templates builder me nahi hai — Simulator ke "Custom Strategy"
-              mode me jaake <b style={{ color: "#00c8f0" }}>BUY CE</b> + <b style={{ color: "#00c8f0" }}>BUY PE</b> (same strike)
+              mode me jaake <b style={{ color: theme.accent.cyan }}>BUY CE</b> + <b style={{ color: theme.accent.cyan }}>BUY PE</b> (same strike)
               add karke khud bana sakte hai.
             </div>
             <button onClick={() => navigate("/simulator")}
-              className="mt-4 px-4 py-2 rounded-lg text-xs font-bold"
-              style={{ background: "#00c8f0", color: "#03050d" }}>
+              className="mt-4 px-4 py-2 rounded-lg text-sm font-bold"
+              style={{ background: theme.accent.cyan, color: theme.bg.page }}>
               Open Simulator →
             </button>
           </div>
@@ -89,26 +91,26 @@ export default function Screener() {
           {matches.map(s => (
             <Card key={s.key} title={s.name}>
               <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <span className="text-xs px-2 py-0.5 rounded"
-                  style={{ background: "#0f1e36", color: "#c0d0e8" }}>
+                <span className="text-sm px-2 py-0.5 rounded"
+                  style={{ background: theme.border.subtle, color: theme.text.secondary }}>
                   {s.legs} {s.legs === 1 ? "Leg" : "Legs"}
                 </span>
-                <span className="text-xs px-2 py-0.5 rounded"
+                <span className="text-sm px-2 py-0.5 rounded"
                   style={{
-                    background: s.risk === "Defined Risk" ? "#00d97e20" : "#f0306020",
-                    color     : s.risk === "Defined Risk" ? "#00d97e" : "#f03060",
+                    background: s.risk === "Defined Risk" ? theme.accent.green + "20" : theme.accent.red + "20",
+                    color     : s.risk === "Defined Risk" ? theme.accent.green : theme.accent.red,
                   }}>
                   {s.risk}
                 </span>
-                <span className="text-xs px-2 py-0.5 rounded"
-                  style={{ background: "#9b5cf620", color: "#9b5cf6" }}>
+                <span className="text-sm px-2 py-0.5 rounded"
+                  style={{ background: theme.accent.purple + "20", color: theme.accent.purple }}>
                   {s.ivPref}
                 </span>
               </div>
-              <div className="text-xs mb-3" style={{ color: "#445566" }}>{s.note}</div>
+              <div className="text-sm mb-3" style={{ color: theme.text.muted }}>{s.note}</div>
               <button onClick={() => navigate("/simulator", { state: { template: s.key } })}
-                className="w-full py-2 rounded-lg text-xs font-bold"
-                style={{ background: "#00c8f015", color: "#00c8f0", border: "1px solid #00c8f030" }}>
+                className="w-full py-2 rounded-lg text-sm font-bold"
+                style={{ background: theme.accent.cyan + "15", color: theme.accent.cyan, border: `1px solid ${theme.accent.cyan}30` }}>
                 Open in Simulator → select "{s.name}"
               </button>
             </Card>
