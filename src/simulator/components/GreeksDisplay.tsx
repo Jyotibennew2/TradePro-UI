@@ -24,42 +24,42 @@ export default function GreeksDisplay({ greeks }: Props) {
     {
       label   : "Δ Delta",
       value   : netDelta,
-      color   : Math.abs(netDelta) < 10 ? "#00d97e" : "#f0a030",
+      color   : Math.abs(netDelta) < 10 ? "#22e894" : "#f0a030",
       desc    : "Spot sensitivity",
       decimals: 2,
     },
     {
       label   : "Γ Gamma",
       value   : netGamma,
-      color   : netGamma >= 0 ? "#00c8f0" : "#9b5cf6",
+      color   : netGamma >= 0 ? "#3ad4ff" : "#b98cf9",
       desc    : "Delta rate of change",
       decimals: 4,
     },
     {
       label   : "Θ Theta",
       value   : netTheta,
-      color   : netTheta >= 0 ? "#00d97e" : "#f03060",
+      color   : netTheta >= 0 ? "#22e894" : "#ff5577",
       desc    : "Daily time decay",
       decimals: 2,
     },
     {
       label   : "ν Vega",
       value   : netVega,
-      color   : netVega >= 0 ? "#00c8f0" : "#f03060",
+      color   : netVega >= 0 ? "#3ad4ff" : "#ff5577",
       desc    : "IV sensitivity",
       decimals: 2,
     },
     {
       label   : "ρ Rho",
       value   : netRho,
-      color   : "#445566",
+      color   : "#8ba0bd",
       desc    : "Rate sensitivity",
       decimals: 2,
     },
     {
       label   : "Value",
       value   : totalValue,
-      color   : totalValue >= 0 ? "#00d97e" : "#f03060",
+      color   : totalValue >= 0 ? "#22e894" : "#ff5577",
       desc    : "Net portfolio value",
       decimals: 0,
     },
@@ -68,18 +68,18 @@ export default function GreeksDisplay({ greeks }: Props) {
   return (
     <div className="grid grid-cols-3 gap-2">
       {items.map(({ label, value, color, desc, decimals }) => (
-        <div key={label} className="rounded-lg p-2 text-center"
-          style={{ background: "#060c1a", border: "1px solid #0f1e36" }}>
-          <div className="text-xs font-bold mb-0.5" style={{ color: "#445566" }}>
+        <div key={label} className="rounded-lg p-3 text-center"
+          style={{ background: "#060c1a", border: "1px solid #1a3050" }}>
+          <div className="text-sm font-bold mb-1" style={{ color: "#8ba0bd" }}>
             {label}
           </div>
-          <div className="text-sm font-black" style={{ color }}>
+          <div className="text-lg font-black" style={{ color }}>
             {value >= 0 ? "+" : ""}{decimals === 0
               ? `₹${Math.round(value).toLocaleString("en-IN")}`
               : value.toFixed(decimals)
             }
           </div>
-          <div className="text-xs mt-0.5" style={{ color: "#334455" }}>{desc}</div>
+          <div className="text-xs mt-1" style={{ color: "#6b8099" }}>{desc}</div>
         </div>
       ))}
     </div>
