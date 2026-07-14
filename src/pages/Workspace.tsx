@@ -4,7 +4,7 @@
  * Quick-nav icon rail on the left jumps between sections.
  */
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useAppStore } from "../store";
 import { useSimulatorStore, makeOptionLeg } from "../simulator/state/simulatorStore";
 import { calculatePayoff } from "../simulator/pricing/PayoffEngine";
@@ -55,6 +55,15 @@ export default function Workspace() {
       setIsCalculating(false);
     }
   }, [legs, effectiveSpot, r]);
+
+  // Auto-calculate payoff whenever legs change (add/edit/remove) — no manual button needed
+  useEffect(() => {
+    if (legs.length > 0) {
+      calculate();
+    } else {
+      setPayoff(null);
+    }
+  }, [legs, calculate]);
 
   const portfolioGreeks: PortfolioGreeks = legs.reduce(
     (acc, leg) => {
@@ -144,7 +153,7 @@ export default function Workspace() {
                   <button onClick={calculate}
                     className="text-sm px-2 py-0.5 rounded flex items-center gap-1"
                     style={{ color: theme.accent.cyan, background: theme.accent.cyan + "15" }}>
-                    <RefreshCw size={13} /> Calculate
+                    <RefreshCw size={13} /> Recalculate
                   </button>
                 }>
                   {legs.map((leg, i) => (
@@ -177,7 +186,7 @@ export default function Workspace() {
           ) : (
             <div className="text-center py-10" style={{ color: theme.text.muted }}>
               <div className="text-3xl mb-2">📈</div>
-              <div className="text-sm">Legs add karke "Calculate" dabaiye</div>
+              <div className="text-sm">Legs add kariye, graph apne aap ban jayega</div>
             </div>
           )}
         </div>
