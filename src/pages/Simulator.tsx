@@ -6,6 +6,7 @@
 import { useState, useCallback, useEffect }  from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAppStore }            from "../store";
+import { useTheme } from "../store/themeStore";
 import { useSimulatorStore, makeOptionLeg } from "../simulator/state/simulatorStore";
 import { StrategyBuilder }        from "../simulator/services/strategyBuilder";
 import { strategyStorage }        from "../simulator/services/strategyStorage";
@@ -37,6 +38,7 @@ import {
 type TabType = "builder" | "payoff" | "greeks" | "scenario" | "margin" | "adjust" | "saved";
 
 export default function Simulator() {
+  const theme = useTheme();
   const { nifty, bankNifty }  = useAppStore();
   const store                 = useSimulatorStore();
   const {
@@ -291,19 +293,19 @@ export default function Simulator() {
     <div className="flex flex-col h-full">
       {/* Tab bar */}
       <div className="flex border-b overflow-x-auto"
-        style={{ borderColor: "#0f1e36", background: "#060c1a" }}>
+        style={{ borderColor: theme.border.subtle, background: theme.bg.surface }}>
         {TABS.map(({ id, label, icon: Icon }) => (
           <button key={id} onClick={() => setTab(id)}
-            className="flex items-center gap-1 px-3 py-2 text-xs font-bold shrink-0 transition-all relative"
+            className="flex items-center gap-1 px-3 py-2 text-sm font-bold shrink-0 transition-all relative"
             style={{
-              color      : tab === id ? "#00c8f0" : "#445566",
-              borderBottom: tab === id ? "2px solid #00c8f0" : "2px solid transparent",
+              color      : tab === id ? theme.accent.cyan : theme.text.muted,
+              borderBottom: tab === id ? `2px solid ${theme.accent.cyan}` : "2px solid transparent",
             }}>
-            <Icon size={11} />{label}
+            <Icon size={14} />{label}
             {id === "adjust" && worstLevel !== "safe" && (
               <span style={{
                 width: 6, height: 6, borderRadius: 99, marginLeft: 2,
-                background: worstLevel === "danger" ? "#f03060" : "#f0a030",
+                background: worstLevel === "danger" ? theme.accent.red : theme.accent.orange,
               }} />
             )}
           </button>
@@ -320,15 +322,15 @@ export default function Simulator() {
               <div className="grid grid-cols-2 gap-2">
                 {/* Underlying */}
                 <div className="col-span-2">
-                  <div className="text-xs mb-1" style={{ color: "#334455" }}>Underlying</div>
+                  <div className="text-sm mb-1" style={{ color: theme.text.muted }}>Underlying</div>
                   <div className="flex rounded-lg overflow-hidden"
-                    style={{ border: "1px solid #0f1e36" }}>
+                    style={{ border: `1px solid ${theme.border.subtle}` }}>
                     {(["NIFTY", "BANKNIFTY", "MIDCPNIFTY"] as const).map(u => (
                       <button key={u} onClick={() => { setUnderlying(u); clearLegs(); }}
-                        className="flex-1 py-1.5 text-xs font-bold"
+                        className="flex-1 py-1.5 text-sm font-bold"
                         style={{
-                          background: underlying === u ? "#00c8f0" : "#090f1e",
-                          color     : underlying === u ? "#03050d" : "#445566",
+                          background: underlying === u ? theme.accent.cyan : theme.bg.surfaceAlt,
+                          color     : underlying === u ? theme.bg.page : theme.text.muted,
                         }}>
                         {u === "MIDCPNIFTY" ? "MIDCP" : u}
                       </button>
@@ -337,17 +339,17 @@ export default function Simulator() {
                 </div>
 
                 {[
-                  { label: "Spot Price", value: spot || effectiveSpot, setter: (v: string) => setSpot(Number(v)), color: "#00c8f0" },
-                  { label: "IV %",       value: iv,                    setter: (v: string) => setIV(Number(v)),   color: "#9b5cf6" },
-                  { label: "Days to Expiry", value: daysToExpiry,      setter: (v: string) => setDaysToExpiry(Number(v)), color: "#f0a030" },
-                  { label: "Risk Free Rate %", value: riskFreeRate,   setter: (v: string) => store.setRiskFreeRate(Number(v)), color: "#445566" },
+                  { label: "Spot Price", value: spot || effectiveSpot, setter: (v: string) => setSpot(Number(v)), color: theme.accent.cyan },
+                  { label: "IV %",       value: iv,                    setter: (v: string) => setIV(Number(v)),   color: theme.accent.purple },
+                  { label: "Days to Expiry", value: daysToExpiry,      setter: (v: string) => setDaysToExpiry(Number(v)), color: theme.accent.orange },
+                  { label: "Risk Free Rate %", value: riskFreeRate,   setter: (v: string) => store.setRiskFreeRate(Number(v)), color: theme.text.muted },
                 ].map(({ label, value, setter, color }) => (
                   <div key={label}>
-                    <div className="text-xs mb-1" style={{ color: "#334455" }}>{label}</div>
+                    <div className="text-sm mb-1" style={{ color: theme.text.muted }}>{label}</div>
                     <input type="number" value={value}
                       onChange={e => setter(e.target.value)}
-                      className="w-full px-2 py-1.5 rounded-lg text-xs outline-none text-center"
-                      style={{ background: "#060c1a", border: "1px solid #0f1e36", color }} />
+                      className="w-full px-2 py-1.5 rounded-lg text-sm outline-none text-center"
+                      style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color }} />
                   </div>
                 ))}
               </div>
@@ -361,13 +363,13 @@ export default function Simulator() {
             {/* Add legs */}
             <Card title="Add Legs">
               <div className="grid grid-cols-2 gap-2">
-                {([["CE","BUY","#00d97e"],["CE","SELL","#f03060"],["PE","BUY","#00c8f0"],["PE","SELL","#9b5cf6"]] as const).map(
+                {([["CE","BUY",theme.accent.green],["CE","SELL",theme.accent.red],["PE","BUY",theme.accent.cyan],["PE","SELL",theme.accent.purple]] as const).map(
                   ([type, action, color]) => (
                     <button key={`${action}-${type}`}
                       onClick={() => addCustomLeg(type, action)}
-                      className="py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1"
+                      className="py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-1"
                       style={{ background: color + "15", color, border: `1px solid ${color}30` }}>
-                      <Plus size={11} /> {action} {type}
+                      <Plus size={14} /> {action} {type}
                     </button>
                   )
                 )}
@@ -380,27 +382,27 @@ export default function Simulator() {
                 <input type="text" value={stratName}
                   onChange={e => setStratName(e.target.value)}
                   placeholder="Strategy name..."
-                  className="w-full px-3 py-1.5 rounded-lg text-xs outline-none"
-                  style={{ background: "#060c1a", border: "1px solid #0f1e36", color: "#c0d0e8" }} />
+                  className="w-full px-3 py-1.5 rounded-lg text-sm outline-none"
+                  style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.text.secondary }} />
                 {saveMsg && (
-                  <div className="text-xs text-center" style={{ color: saveMsg.startsWith("✅") ? "#00d97e" : "#f03060" }}>
+                  <div className="text-sm text-center" style={{ color: saveMsg.startsWith("✅") ? theme.accent.green : theme.accent.red }}>
                     {saveMsg}
                   </div>
                 )}
                 <div className="grid grid-cols-3 gap-2">
                   <button onClick={handleSave}
-                    className="py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1"
-                    style={{ background: "#00d97e20", color: "#00d97e", border: "1px solid #00d97e30" }}>
-                    <Save size={11} /> Save
+                    className="py-1.5 rounded-lg text-sm font-bold flex items-center justify-center gap-1"
+                    style={{ background: theme.accent.green + "20", color: theme.accent.green, border: `1px solid ${theme.accent.green}30` }}>
+                    <Save size={14} /> Save
                   </button>
                   <button onClick={handleExport}
-                    className="py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1"
-                    style={{ background: "#00c8f020", color: "#00c8f0", border: "1px solid #00c8f030" }}>
-                    <Download size={11} /> Export
+                    className="py-1.5 rounded-lg text-sm font-bold flex items-center justify-center gap-1"
+                    style={{ background: theme.accent.cyan + "20", color: theme.accent.cyan, border: `1px solid ${theme.accent.cyan}30` }}>
+                    <Download size={14} /> Export
                   </button>
-                  <label className="py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
-                    style={{ background: "#9b5cf620", color: "#9b5cf6", border: "1px solid #9b5cf630" }}>
-                    <Upload size={11} /> Import
+                  <label className="py-1.5 rounded-lg text-sm font-bold flex items-center justify-center gap-1 cursor-pointer"
+                    style={{ background: theme.accent.purple + "20", color: theme.accent.purple, border: `1px solid ${theme.accent.purple}30` }}>
+                    <Upload size={14} /> Import
                     <input type="file" accept=".json" className="hidden" onChange={handleImport} />
                   </label>
                 </div>
@@ -412,14 +414,14 @@ export default function Simulator() {
               <Card title={`Legs (${legs.length})`} extra={
                 <div className="flex gap-2">
                   <button onClick={clearLegs}
-                    className="text-xs px-2 py-0.5 rounded"
-                    style={{ color: "#f03060", background: "#f0306015" }}>
+                    className="text-sm px-2 py-0.5 rounded"
+                    style={{ color: theme.accent.red, background: theme.accent.red + "15" }}>
                     Clear All
                   </button>
                   <button onClick={calculate}
-                    className="text-xs px-2 py-0.5 rounded flex items-center gap-1"
-                    style={{ color: "#00c8f0", background: "#00c8f015" }}>
-                    <RefreshCw size={10} /> Calculate
+                    className="text-sm px-2 py-0.5 rounded flex items-center gap-1"
+                    style={{ color: theme.accent.cyan, background: theme.accent.cyan + "15" }}>
+                    <RefreshCw size={13} /> Calculate
                   </button>
                 </div>
               }>
@@ -439,7 +441,7 @@ export default function Simulator() {
             )}
 
             {!legs.length && (
-              <div className="text-center py-10" style={{ color: "#445566" }}>
+              <div className="text-center py-10" style={{ color: theme.text.muted }}>
                 <div className="text-3xl mb-2">📊</div>
                 <div className="text-sm">Select a template or add legs manually</div>
               </div>
@@ -453,15 +455,15 @@ export default function Simulator() {
             {!payoff && legs.length > 0 && (
               <button onClick={calculate}
                 className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
-                style={{ background: "#00c8f020", color: "#00c8f0", border: "1px solid #00c8f030" }}>
+                style={{ background: theme.accent.cyan + "20", color: theme.accent.cyan, border: `1px solid ${theme.accent.cyan}30` }}>
                 <RefreshCw size={14} /> Calculate Payoff
               </button>
             )}
             {payoff && (
               <Card title="Payoff Diagram" extra={
                 <button onClick={() => setShowPerLeg(v => !v)}
-                  className="text-xs px-2 py-0.5 rounded"
-                  style={{ color: showPerLeg ? "#00c8f0" : "#445566", background: "#0f1e36" }}>
+                  className="text-sm px-2 py-0.5 rounded"
+                  style={{ color: showPerLeg ? theme.accent.cyan : theme.text.muted, background: theme.border.subtle }}>
                   Per Leg
                 </button>
               }>
@@ -469,7 +471,7 @@ export default function Simulator() {
               </Card>
             )}
             {!payoff && !legs.length && (
-              <div className="text-center py-10" style={{ color: "#445566" }}>
+              <div className="text-center py-10" style={{ color: theme.text.muted }}>
                 <div className="text-3xl mb-2">📈</div>
                 <div className="text-sm">Add legs and calculate payoff</div>
               </div>
@@ -482,7 +484,7 @@ export default function Simulator() {
           <>
             {legs.length > 0
               ? <Card title="Portfolio Greeks"><GreeksDisplay greeks={portfolioGreeks} /></Card>
-              : <div className="text-center py-10" style={{ color: "#445566" }}>
+              : <div className="text-center py-10" style={{ color: theme.text.muted }}>
                   <div className="text-3xl mb-2">🧮</div>
                   <div className="text-sm">Add legs to see Greeks</div>
                 </div>
@@ -497,7 +499,7 @@ export default function Simulator() {
               ? <Card title="Scenario Matrix (Spot × IV)">
                   <ScenarioMatrixDisplay matrix={scenarioMatrix} />
                 </Card>
-              : <div className="text-center py-10" style={{ color: "#445566" }}>
+              : <div className="text-center py-10" style={{ color: theme.text.muted }}>
                   <div className="text-3xl mb-2">🗺️</div>
                   <div className="text-sm">Add legs to see scenario matrix</div>
                 </div>
@@ -512,7 +514,7 @@ export default function Simulator() {
               ? <Card title="Margin Analysis">
                   <MarginDisplay margin={margin} available={500000} />
                 </Card>
-              : <div className="text-center py-10" style={{ color: "#445566" }}>
+              : <div className="text-center py-10" style={{ color: theme.text.muted }}>
                   <div className="text-3xl mb-2">🛡️</div>
                   <div className="text-sm">Add legs to see margin requirements</div>
                 </div>
@@ -524,15 +526,15 @@ export default function Simulator() {
         {tab === "adjust" && (
           <>
             {legs.length === 0 ? (
-              <div className="text-center py-10" style={{ color: "#445566" }}>
+              <div className="text-center py-10" style={{ color: theme.text.muted }}>
                 <div className="text-3xl mb-2">🛠️</div>
                 <div className="text-sm">Add legs to see adjustment suggestions</div>
               </div>
             ) : adjustments.length === 0 ? (
-              <div className="text-center py-10" style={{ color: "#445566" }}>
+              <div className="text-center py-10" style={{ color: theme.text.muted }}>
                 <div className="text-3xl mb-2">🛡️</div>
                 <div className="text-sm">No short legs to monitor</div>
-                <div className="text-xs mt-1" style={{ color: "#334455" }}>
+                <div className="text-sm mt-1" style={{ color: theme.text.faint }}>
                   Adjustment suggestions apply to SELL legs only
                 </div>
               </div>
@@ -542,10 +544,10 @@ export default function Simulator() {
                   <div className="flex items-center gap-2 py-1">
                     <span style={{
                       width: 10, height: 10, borderRadius: 99,
-                      background: worstLevel === "danger" ? "#f03060" : worstLevel === "watch" ? "#f0a030" : "#00d97e",
+                      background: worstLevel === "danger" ? theme.accent.red : worstLevel === "watch" ? theme.accent.orange : theme.accent.green,
                     }} />
                     <span className="text-sm font-bold" style={{
-                      color: worstLevel === "danger" ? "#f03060" : worstLevel === "watch" ? "#f0a030" : "#00d97e",
+                      color: worstLevel === "danger" ? theme.accent.red : worstLevel === "watch" ? theme.accent.orange : theme.accent.green,
                     }}>
                       {worstLevel === "danger" ? "Action needed — strike breached or near breach"
                         : worstLevel === "watch" ? "Watch closely — spot approaching a short strike"
@@ -558,27 +560,27 @@ export default function Simulator() {
                   <Card key={leg.id}
                     title={`${leg.action} ${leg.contract.strike} ${leg.contract.optionType}`}
                     extra={
-                      <span className="text-xs px-2 py-0.5 rounded font-bold" style={{
-                        background: level === "danger" ? "#f0306020" : level === "watch" ? "#f0a03020" : "#00d97e20",
-                        color     : level === "danger" ? "#f03060"   : level === "watch" ? "#f0a030"   : "#00d97e",
+                      <span className="text-sm px-2 py-0.5 rounded font-bold" style={{
+                        background: level === "danger" ? theme.accent.red + "20" : level === "watch" ? theme.accent.orange + "20" : theme.accent.green + "20",
+                        color     : level === "danger" ? theme.accent.red   : level === "watch" ? theme.accent.orange   : theme.accent.green,
                       }}>
                         {level === "danger" ? "🔴 Danger" : level === "watch" ? "🟠 Watch" : "🟢 Safe"}
                       </span>
                     }>
-                    <div className="text-xs mb-3" style={{ color: "#445566" }}>
+                    <div className="text-sm mb-3" style={{ color: theme.text.muted }}>
                       Spot is {distPct >= 0 ? `${distPct.toFixed(2)}% away from` : `${Math.abs(distPct).toFixed(2)}% past`} this strike.
                     </div>
                     {level !== "safe" && (
                       <div className="grid grid-cols-2 gap-2">
                         <button onClick={() => handleRollStrike(leg)}
-                          className="py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1"
-                          style={{ background: "#00c8f020", color: "#00c8f0", border: "1px solid #00c8f030" }}>
-                          <ArrowUpDown size={11} /> Roll Strike (One-Click)
+                          className="py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-1"
+                          style={{ background: theme.accent.cyan + "20", color: theme.accent.cyan, border: `1px solid ${theme.accent.cyan}30` }}>
+                          <ArrowUpDown size={14} /> Roll Strike (One-Click)
                         </button>
                         <button onClick={() => removeLeg(leg.id)}
-                          className="py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1"
-                          style={{ background: "#f0306015", color: "#f03060", border: "1px solid #f0306030" }}>
-                          <X size={11} /> Close Leg
+                          className="py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-1"
+                          style={{ background: theme.accent.red + "15", color: theme.accent.red, border: `1px solid ${theme.accent.red}30` }}>
+                          <X size={14} /> Close Leg
                         </button>
                       </div>
                     )}
@@ -593,38 +595,38 @@ export default function Simulator() {
         {tab === "saved" && (
           <>
             {savedList.length === 0
-              ? <div className="text-center py-10" style={{ color: "#445566" }}>
+              ? <div className="text-center py-10" style={{ color: theme.text.muted }}>
                   <div className="text-3xl mb-2">💾</div>
                   <div className="text-sm">No saved strategies</div>
                 </div>
               : <div className="space-y-2">
                   {savedList.map(s => (
                     <div key={s.id} className="rounded-xl p-3"
-                      style={{ background: "#090f1e", border: "1px solid #0f1e36" }}>
+                      style={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}` }}>
                       <div className="flex items-center justify-between mb-1">
                         <div>
-                          <div className="text-xs font-bold" style={{ color: "#c0d0e8" }}>{s.name}</div>
-                          <div className="text-xs" style={{ color: "#445566" }}>
+                          <div className="text-sm font-bold" style={{ color: theme.text.secondary }}>{s.name}</div>
+                          <div className="text-sm" style={{ color: theme.text.muted }}>
                             {s.underlying} • {s.legs.length} legs • ₹{s.spot.toLocaleString("en-IN")}
                           </div>
                         </div>
                         <div className="flex gap-1">
                           <button onClick={() => handleLoad(s)}
-                            className="text-xs px-2 py-0.5 rounded"
-                            style={{ background: "#00c8f020", color: "#00c8f0" }}>
+                            className="text-sm px-2 py-0.5 rounded"
+                            style={{ background: theme.accent.cyan + "20", color: theme.accent.cyan }}>
                             Load
                           </button>
                           <button onClick={() => strategyStorage.exportStrategy(s)}
-                            className="text-xs px-2 py-0.5 rounded"
-                            style={{ background: "#0f1e36", color: "#445566" }}>
-                            <Download size={10} />
+                            className="text-sm px-2 py-0.5 rounded"
+                            style={{ background: theme.border.subtle, color: theme.text.muted }}>
+                            <Download size={13} />
                           </button>
                           <button onClick={() => {
                             strategyStorage.deleteStrategy(s.id);
                             setSavedList(strategyStorage.getAll());
                           }}
-                            className="text-xs px-2 py-0.5 rounded"
-                            style={{ background: "#f0306015", color: "#f03060" }}>
+                            className="text-sm px-2 py-0.5 rounded"
+                            style={{ background: theme.accent.red + "15", color: theme.accent.red }}>
                             ✕
                           </button>
                         </div>
