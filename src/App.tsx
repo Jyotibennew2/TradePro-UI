@@ -14,6 +14,7 @@ import Backtest     from "./pages/Backtest";
 import AIAssistant from "./pages/AIAssistant";
 import Workspace  from "./pages/Workspace";
 import Screener2 from "./pages/Screener";
+import { useTheme } from "./store/themeStore";
 
 const qc = new QueryClient({
   defaultOptions: {
@@ -26,11 +27,12 @@ const qc = new QueryClient({
 });
 
 export default function App() {
+  const theme = useTheme();
   return (
     <QueryClientProvider client={qc}>
       <BrowserRouter>
         <div className="flex flex-col h-screen overflow-hidden"
-          style={{ background: "#03050d" }}>
+          style={{ background: theme.bg.page, color: theme.text.primary }}>
 
           {/* Header */}
           <Header />
