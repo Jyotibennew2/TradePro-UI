@@ -41,6 +41,45 @@ export const fetchQuotes = (symbols: string = "NSE:NIFTY50-INDEX,NSE:NIFTYBANK-I
 export const fetchChain = (symbol: string, expiry = "", strikecount = 10) =>
   get<ChainResponse>(`/optionchain?symbol=${symbol}&expiry=${expiry}&strikecount=${strikecount}`);
 
+// ─── Historical Option Chain (Black-Scholes reconstruction) ──────────────────
+export interface HistoricalChainRow {
+  strike  : number;
+  ce_ltp  : number;
+  pe_ltp  : number;
+  ce_iv   : number;
+  pe_iv   : number;
+  ce_delta: number;
+  pe_delta: number;
+  atm     : boolean;
+}
+
+export interface HistoricalChainResponse {
+  success      : boolean;
+  symbol       : string;
+  spot         : number;
+  label        : string;
+  reconstructed: boolean;
+  note         : string;
+  data: {
+    expiryData: HistoricalChainRow[];
+    atmIndex  : number;
+  };
+}
+
+export const fetchHistoricalChain = (params: {
+  symbol       : string;
+  spot         : number;
+  iv?          : number;
+  daysToExpiry?: number;
+  strikecount? : number;
+  label?       : string;
+}) => {
+  const { symbol, spot, iv = 15, daysToExpiry = 7, strikecount = 10, label = "" } = params;
+  return get<HistoricalChainResponse>(
+    `/optionchain/historical?symbol=${symbol}&spot=${spot}&iv=${iv}&days_to_expiry=${daysToExpiry}&strikecount=${strikecount}&label=${encodeURIComponent(label)}`
+  );
+};
+
 // ─── Greeks ──────────────────────────────────────────────────────────────────
 export const fetchGreeks = (spot: number, strike: number, expiry: number, iv: number, type: string) =>
   get<GreeksResponse>(`/greeks?spot=${spot}&strike=${strike}&expiry=${expiry}&iv=${iv}&type=${type}`);
