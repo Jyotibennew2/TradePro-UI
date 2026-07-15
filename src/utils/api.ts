@@ -27,6 +27,8 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json();
 }
 
+export type Timeframe = "5m" | "15m" | "30m" | "1h" | "2h" | "1d";
+
 // ─── Health ──────────────────────────────────────────────────────────────────
 export const fetchHealth = () =>
   get<HealthResponse>("/health");
@@ -82,17 +84,25 @@ export const fetchPortfolioSummary = () =>
 
 // ─── Backtest ─────────────────────────────────────────────────────────────────
 export const runBacktest = (params: {
-  symbol  ?: string;
-  strategy: string;
-  days    : number;
-  sl_pct  : number;
-  tgt_pct : number;
-  lot_size: number;
+  symbol    ?: string;
+  strategy  : string;
+  days      : number;
+  resolution?: Timeframe;
+  sl_pct    : number;
+  tgt_pct   : number;
+  lot_size  : number;
 }) => post<BacktestResponse>("/backtest", params);
 
 // ─── Historical ──────────────────────────────────────────────────────────────
-export const fetchHistorical = (symbol: string, days = 30) =>
-  get<{ success: boolean; symbol: string; interval: string; candles: { t: number; open: number; high: number; low: number; close: number; volume: number }[]; mock: boolean }>(`/historical?symbol=${symbol}&days=${days}`);
+export const fetchHistorical = (symbol: string, days = 30, resolution: Timeframe = "1d") =>
+  get<{
+    success   : boolean;
+    symbol    : string;
+    interval  : string;
+    days_used?: number;
+    candles   : { t: number; open: number; high: number; low: number; close: number; volume: number }[];
+    mock      : boolean;
+  }>(`/historical?symbol=${symbol}&days=${days}&resolution=${resolution}`);
 
 // ─── Funds ───────────────────────────────────────────────────────────────────
 export const fetchFunds = () =>
