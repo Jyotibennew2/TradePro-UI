@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { runBacktest, fetchHistorical } from "../utils/api";
+import { useState, useEffect } from "react";
+import { runBacktest, fetchHistorical, type Timeframe } from "../utils/api";
 import Card from "../components/ui/Card";
 import Loader from "../components/ui/Loader";
 import ErrorBox from "../components/ui/ErrorBox";
@@ -20,6 +20,16 @@ const STRATEGIES = [
 ];
 
 const SYMBOLS = ["NIFTY", "BANKNIFTY"];
+
+// Matches backend/validators.py RESOLUTION_MAP + MAX_DAYS_BY_RESOLUTION
+const TIMEFRAMES: { key: Timeframe; label: string; maxDays: number }[] = [
+  { key: "5m",  label: "5 Min",  maxDays: 30  },
+  { key: "15m", label: "15 Min", maxDays: 60  },
+  { key: "30m", label: "30 Min", maxDays: 90  },
+  { key: "1h",  label: "1 Hour", maxDays: 180 },
+  { key: "2h",  label: "2 Hour", maxDays: 270 },
+  { key: "1d",  label: "1 Day",  maxDays: 365 },
+];
 
 function StatBox({ label, value, color, theme }: { label: string; value: string; color: string; theme: Theme }) {
   return (
@@ -55,11 +65,19 @@ export default function Backtest() {
   const [mode, setMode] = useState<Mode>("single");
 
   // Shared params
-  const [symbol,   setSymbol]   = useState("NIFTY");
-  const [days,     setDays]     = useState(90);
-  const [slPct,    setSlPct]    = useState(50);
-  const [tgtPct,   setTgtPct]   = useState(50);
-  const [lotSize,  setLotSize]  = useState(50);
+  const [symbol,     setSymbol]     = useState("NIFTY");
+  const [resolution, setResolution] = useState<Timeframe>("1d");
+  const [days,       setDays]       = useState(90);
+  const [slPct,      setSlPct]      = useState(50);
+  const [tgtPct,     setTgtPct]     = useState(50);
+  const [lotSize,    setLotSize]    = useState(50);
+
+  const activeTf = TIMEFRAMES.find(t => t.key === resolution)!;
+
+  // Clamp days whenever timeframe changes, so intraday timeframes don't request absurd ranges
+  useEffect(() => {
+    setDays(d => Math.min(d, activeTf.maxDays));
+  }, [resolution]);
 
   // Single mode
   const [strategy, setStrategy] = useState("ironCondor");
@@ -70,7 +88,7 @@ export default function Backtest() {
   const runSingle = async () => {
     setIsPending(true); setIsError(false); setData(null);
     try {
-      const res = await runBacktest({ symbol, strategy, days, sl_pct: slPct, tgt_pct: tgtPct, lot_size: lotSize });
+      const res = await runBacktest({ symbol, strategy, days, resolution, sl_pct: slPct, tgt_pct: tgtPct, lot_size: lotSize });
       setData(res);
     } catch {
       setIsError(true);
@@ -95,7 +113,7 @@ export default function Backtest() {
     try {
       const results = await Promise.all(
         selected.map(async key => {
-          const res = await runBacktest({ symbol, strategy: key, days, sl_pct: slPct, tgt_pct: tgtPct, lot_size: lotSize });
+          const res = await runBacktest({ symbol, strategy: key, days, resolution, sl_pct: slPct, tgt_pct: tgtPct, lot_size: lotSize });
           const label = STRATEGIES.find(s => s.key === key)?.label ?? key;
           return { key, label, data: res };
         })
@@ -116,7 +134,7 @@ export default function Backtest() {
   const loadHistorical = async () => {
     setHistLoading(true); setHistError(false); setHistData(null);
     try {
-      const res = await fetchHistorical(symbol, days);
+      const res = await fetchHistorical(symbol, days, resolution);
       setHistData(res);
     } catch {
       setHistError(true);
@@ -144,9 +162,12 @@ export default function Backtest() {
     return rows;
   })();
 
-  // Historical candles → chart-friendly rows
+  // Historical candles → chart-friendly rows (include time for intraday timeframes)
+  const isIntraday = resolution !== "1d";
   const histChartData = (histData?.candles ?? []).map((c: any) => ({
-    date : new Date(c.t * 1000).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+    date : isIntraday
+      ? new Date(c.t * 1000).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+      : new Date(c.t * 1000).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
     close: c.close,
     high : c.high,
     low  : c.low,
@@ -194,20 +215,44 @@ export default function Backtest() {
         </button>
       </div>
 
-      {/* Symbol selector — shared across all modes */}
-      <Card title="Symbol (historical data source)">
-        <div className="flex rounded-lg overflow-hidden"
-          style={{ border: `1px solid ${theme.border.subtle}` }}>
-          {SYMBOLS.map(sym => (
-            <button key={sym} onClick={() => setSymbol(sym)}
-              className="flex-1 py-1.5 text-sm font-bold"
-              style={{
-                background: symbol === sym ? theme.accent.cyan : theme.bg.surfaceAlt,
-                color     : symbol === sym ? theme.bg.page : theme.text.muted,
-              }}>
-              {sym}
-            </button>
-          ))}
+      {/* Symbol + Timeframe — shared across all modes */}
+      <Card title="Symbol & Timeframe">
+        <div className="space-y-3">
+          <div>
+            <div className="text-sm mb-1" style={{ color: theme.text.muted }}>Symbol</div>
+            <div className="flex rounded-lg overflow-hidden"
+              style={{ border: `1px solid ${theme.border.subtle}` }}>
+              {SYMBOLS.map(sym => (
+                <button key={sym} onClick={() => setSymbol(sym)}
+                  className="flex-1 py-1.5 text-sm font-bold"
+                  style={{
+                    background: symbol === sym ? theme.accent.cyan : theme.bg.surfaceAlt,
+                    color     : symbol === sym ? theme.bg.page : theme.text.muted,
+                  }}>
+                  {sym}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-sm mb-1" style={{ color: theme.text.muted }}>
+              Timeframe <span style={{ color: theme.text.faint }}>(max {activeTf.maxDays}d lookback)</span>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {TIMEFRAMES.map(tf => (
+                <button key={tf.key} onClick={() => setResolution(tf.key)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-bold"
+                  style={{
+                    background: resolution === tf.key ? theme.accent.purple : theme.bg.surfaceAlt,
+                    color     : resolution === tf.key ? theme.bg.page : theme.text.muted,
+                    border    : `1px solid ${theme.border.subtle}`,
+                  }}>
+                  {tf.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </Card>
 
@@ -220,7 +265,7 @@ export default function Backtest() {
                 <div className="text-sm mb-1" style={{ color: theme.text.muted }}>
                   Days: <span style={{ color: theme.accent.cyan }}>{days}</span>
                 </div>
-                <input type="range" min={10} max={365} value={days}
+                <input type="range" min={1} max={activeTf.maxDays} value={days}
                   onChange={e => setDays(Number(e.target.value))}
                   className="w-full" />
               </div>
@@ -228,7 +273,7 @@ export default function Backtest() {
                 disabled={histLoading}
                 className="w-full py-2.5 rounded-xl text-sm font-black"
                 style={{ background: theme.accent.cyan, color: theme.bg.page, opacity: histLoading ? 0.7 : 1 }}>
-                {histLoading ? "Loading..." : `▶ Load ${symbol} Historical Data`}
+                {histLoading ? "Loading..." : `▶ Load ${symbol} • ${activeTf.label}`}
               </button>
             </div>
           </Card>
@@ -243,10 +288,10 @@ export default function Backtest() {
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <StatBox theme={theme} label={`${symbol} — ${days}d ago`} value={`₹${fmt(histStats.first)}`} color={theme.text.secondary} />
-                <StatBox theme={theme} label={`${symbol} — Latest`}       value={`₹${fmt(histStats.last)}`}  color={theme.accent.cyan} />
-                <StatBox theme={theme} label="Period High"                value={`₹${fmt(histStats.high)}`}  color={theme.accent.green} />
-                <StatBox theme={theme} label="Period Low"                 value={`₹${fmt(histStats.low)}`}   color={theme.accent.red} />
+                <StatBox theme={theme} label={`${symbol} — start`}  value={`₹${fmt(histStats.first)}`} color={theme.text.secondary} />
+                <StatBox theme={theme} label={`${symbol} — latest`} value={`₹${fmt(histStats.last)}`}  color={theme.accent.cyan} />
+                <StatBox theme={theme} label="Period High"          value={`₹${fmt(histStats.high)}`}  color={theme.accent.green} />
+                <StatBox theme={theme} label="Period Low"           value={`₹${fmt(histStats.low)}`}   color={theme.accent.red} />
               </div>
 
               <div className="rounded-xl p-3 text-center"
@@ -258,7 +303,7 @@ export default function Backtest() {
                 </div>
               </div>
 
-              <Card title={`${symbol} Price History (${histChartData.length} candles)`}>
+              <Card title={`${symbol} • ${activeTf.label} Price History (${histChartData.length} candles)`}>
                 <ResponsiveContainer width="100%" height={220}>
                   <AreaChart data={histChartData}>
                     <defs>
@@ -281,7 +326,7 @@ export default function Backtest() {
           {!histData && !histLoading && (
             <div className="text-center py-16" style={{ color: theme.text.muted }}>
               <div className="text-4xl mb-3">📅</div>
-              <div className="text-sm">Load historical candles for {symbol}</div>
+              <div className="text-sm">Load {activeTf.label} candles for {symbol}</div>
               <div className="text-sm mt-1" style={{ color: theme.text.faint }}>Same data feeds the backtest engine</div>
             </div>
           )}
@@ -339,7 +384,7 @@ export default function Backtest() {
 
             <div className="grid grid-cols-2 gap-3">
               {[
-                { label: "Days",     value: days,    setter: setDays,    min: 10,  max: 365 },
+                { label: "Days",     value: days,    setter: setDays,    min: 1,   max: activeTf.maxDays },
                 { label: "SL %",     value: slPct,   setter: setSlPct,   min: 10,  max: 200 },
                 { label: "Target %", value: tgtPct,  setter: setTgtPct,  min: 10,  max: 200 },
                 { label: "Lot Size", value: lotSize, setter: setLotSize, min: 1,   max: 500 },
