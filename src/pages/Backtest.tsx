@@ -19,6 +19,8 @@ const STRATEGIES = [
   { key: "longPut",    label: "Long Put"         },
 ];
 
+const SYMBOLS = ["NIFTY", "BANKNIFTY"];
+
 function StatBox({ label, value, color, theme }: { label: string; value: string; color: string; theme: Theme }) {
   return (
     <div className="rounded-xl p-3 text-center"
@@ -29,6 +31,21 @@ function StatBox({ label, value, color, theme }: { label: string; value: string;
   );
 }
 
+function DataSourceBadge({ source, theme }: { source?: "LIVE" | "MOCK"; theme: Theme }) {
+  if (!source) return null;
+  const isLive = source === "LIVE";
+  return (
+    <span className="text-sm px-2 py-0.5 rounded font-bold flex items-center gap-1"
+      style={{
+        background: isLive ? theme.accent.green + "20" : theme.accent.orange + "20",
+        color     : isLive ? theme.accent.green : theme.accent.orange,
+      }}>
+      <span style={{ width: 6, height: 6, borderRadius: 99, background: isLive ? theme.accent.green : theme.accent.orange }} />
+      {isLive ? "LIVE historical data" : "MOCK historical data"}
+    </span>
+  );
+}
+
 export default function Backtest() {
   const theme = useTheme();
   const COLORS = [theme.accent.cyan, theme.accent.orange, theme.accent.purple, theme.accent.red, theme.accent.green];
@@ -36,6 +53,7 @@ export default function Backtest() {
   const [mode, setMode] = useState<"single" | "compare">("single");
 
   // Shared params
+  const [symbol,   setSymbol]   = useState("NIFTY");
   const [days,     setDays]     = useState(90);
   const [slPct,    setSlPct]    = useState(50);
   const [tgtPct,   setTgtPct]   = useState(50);
@@ -50,7 +68,7 @@ export default function Backtest() {
   const runSingle = async () => {
     setIsPending(true); setIsError(false); setData(null);
     try {
-      const res = await runBacktest({ strategy, days, sl_pct: slPct, tgt_pct: tgtPct, lot_size: lotSize });
+      const res = await runBacktest({ symbol, strategy, days, sl_pct: slPct, tgt_pct: tgtPct, lot_size: lotSize });
       setData(res);
     } catch {
       setIsError(true);
@@ -75,7 +93,7 @@ export default function Backtest() {
     try {
       const results = await Promise.all(
         selected.map(async key => {
-          const res = await runBacktest({ strategy: key, days, sl_pct: slPct, tgt_pct: tgtPct, lot_size: lotSize });
+          const res = await runBacktest({ symbol, strategy: key, days, sl_pct: slPct, tgt_pct: tgtPct, lot_size: lotSize });
           const label = STRATEGIES.find(s => s.key === key)?.label ?? key;
           return { key, label, data: res };
         })
@@ -135,6 +153,24 @@ export default function Backtest() {
       {/* Shared params */}
       <Card title="Backtest Configuration">
         <div className="space-y-3">
+
+          {/* Symbol + historical data source */}
+          <div>
+            <div className="text-sm mb-1" style={{ color: theme.text.muted }}>Symbol (historical data)</div>
+            <div className="flex rounded-lg overflow-hidden"
+              style={{ border: `1px solid ${theme.border.subtle}` }}>
+              {SYMBOLS.map(sym => (
+                <button key={sym} onClick={() => setSymbol(sym)}
+                  className="flex-1 py-1.5 text-sm font-bold"
+                  style={{
+                    background: symbol === sym ? theme.accent.cyan : theme.bg.surfaceAlt,
+                    color     : symbol === sym ? theme.bg.page : theme.text.muted,
+                  }}>
+                  {sym}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {mode === "single" && (
             <div>
@@ -226,6 +262,10 @@ export default function Backtest() {
 
           {s && (
             <>
+              <div className="flex justify-end">
+                <DataSourceBadge source={data?.data_source} theme={theme} />
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <StatBox theme={theme} label="Total Trades" value={`${s.total}`}                          color={theme.text.secondary} />
                 <StatBox theme={theme} label="Win Rate"     value={fmtPct(s.win_rate)}                    color={s.win_rate >= 50 ? theme.accent.green : theme.accent.red} />
@@ -306,6 +346,10 @@ export default function Backtest() {
 
           {compareResults && (
             <>
+              <div className="flex justify-end">
+                <DataSourceBadge source={compareResults[0]?.data?.data_source} theme={theme} />
+              </div>
+
               <Card title="Strategy Comparison">
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
