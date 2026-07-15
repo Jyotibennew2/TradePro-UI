@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { runBacktest, fetchHistorical, type Timeframe } from "../utils/api";
+import { runBacktest, fetchHistorical, fetchHistoricalChain, type Timeframe, type HistoricalChainRow } from "../utils/api";
 import Card from "../components/ui/Card";
 import Loader from "../components/ui/Loader";
 import ErrorBox from "../components/ui/ErrorBox";
@@ -133,15 +133,46 @@ export default function Backtest() {
 
   const loadHistorical = async () => {
     setHistLoading(true); setHistError(false); setHistData(null);
+    setChainData(null); setChainError(false);
     try {
       const res = await fetchHistorical(symbol, days, resolution);
       setHistData(res);
+      setCandleIdx(res.candles.length > 0 ? res.candles.length - 1 : 0);
     } catch {
       setHistError(true);
     } finally {
       setHistLoading(false);
     }
   };
+
+  // Historical option chain (reconstructed via Black-Scholes for a selected candle)
+  const [candleIdx, setCandleIdx]     = useState(0);
+  const [chainIv, setChainIv]         = useState(15);
+  const [chainDte, setChainDte]       = useState(7);
+  const [chainData, setChainData]     = useState<any>(null);
+  const [chainLoading, setChainLoading] = useState(false);
+  const [chainError, setChainError]     = useState(false);
+
+  const loadHistoricalChain = async () => {
+    const candle = histData?.candles?.[candleIdx];
+    if (!candle) return;
+    setChainLoading(true); setChainError(false); setChainData(null);
+    try {
+      const label = isIntradayGlobal(resolution)
+        ? new Date(candle.t * 1000).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+        : new Date(candle.t * 1000).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+      const res = await fetchHistoricalChain({
+        symbol, spot: candle.close, iv: chainIv, daysToExpiry: chainDte, strikecount: 8, label,
+      });
+      setChainData(res);
+    } catch {
+      setChainError(true);
+    } finally {
+      setChainLoading(false);
+    }
+  };
+
+  function isIntradayGlobal(r: Timeframe) { return r !== "1d"; }
 
   const s = data?.summary;
   const fmt    = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 0 });
@@ -319,6 +350,92 @@ export default function Backtest() {
                     <Area type="monotone" dataKey="close" stroke={theme.accent.cyan} strokeWidth={2} fill="url(#histGrad)" dot={false} />
                   </AreaChart>
                 </ResponsiveContainer>
+              </Card>
+
+              {/* ── Historical Option Chain (reconstructed) ── */}
+              <Card title="Historical Option Chain">
+                <div className="space-y-3">
+                  <div className="text-sm" style={{ color: theme.text.faint }}>
+                    Fyers doesn't provide real historical option-chain quotes (expired contracts aren't queryable). This
+                    reconstructs a theoretical chain via Black-Scholes using that day's actual spot price.
+                  </div>
+
+                  <div>
+                    <div className="text-sm mb-1" style={{ color: theme.text.muted }}>
+                      Pick a candle: <span style={{ color: theme.accent.cyan }}>{histChartData[candleIdx]?.date}</span> • Spot ₹{fmt(histData.candles[candleIdx]?.close ?? 0)}
+                    </div>
+                    <input type="range" min={0} max={Math.max(histData.candles.length - 1, 0)} value={candleIdx}
+                      onChange={e => setCandleIdx(Number(e.target.value))}
+                      className="w-full" />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <div className="text-sm mb-1" style={{ color: theme.text.muted }}>Assumed IV %</div>
+                      <input type="number" min={1} max={100} value={chainIv}
+                        onChange={e => setChainIv(Number(e.target.value))}
+                        className="w-full px-2 py-1.5 rounded-lg text-sm outline-none text-center"
+                        style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.accent.purple }} />
+                    </div>
+                    <div>
+                      <div className="text-sm mb-1" style={{ color: theme.text.muted }}>Days to Expiry</div>
+                      <input type="number" min={1} max={90} value={chainDte}
+                        onChange={e => setChainDte(Number(e.target.value))}
+                        className="w-full px-2 py-1.5 rounded-lg text-sm outline-none text-center"
+                        style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.accent.orange }} />
+                    </div>
+                  </div>
+
+                  <button onClick={loadHistoricalChain}
+                    disabled={chainLoading}
+                    className="w-full py-2 rounded-lg text-sm font-black"
+                    style={{ background: theme.accent.purple, color: theme.bg.page, opacity: chainLoading ? 0.7 : 1 }}>
+                    {chainLoading ? "Building chain..." : "▶ View Option Chain for this date"}
+                  </button>
+
+                  {chainError && <ErrorBox message="Failed to build historical option chain" />}
+
+                  {chainData && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm px-1">
+                        <span style={{ color: theme.text.muted }}>{chainData.label}</span>
+                        <span className="px-2 py-0.5 rounded font-bold"
+                          style={{ background: theme.accent.orange + "20", color: theme.accent.orange }}>
+                          Reconstructed (Black-Scholes)
+                        </span>
+                      </div>
+
+                      <div className="grid text-center px-1 font-semibold"
+                        style={{ gridTemplateColumns: "1fr 1fr 76px 1fr 1fr", fontSize: 11, color: theme.text.faint }}>
+                        <div style={{ color: theme.accent.green }}>CE Δ</div>
+                        <div style={{ color: theme.accent.green }}>CE LTP</div>
+                        <div style={{ color: theme.accent.cyan  }}>STRIKE</div>
+                        <div style={{ color: theme.accent.red   }}>PE LTP</div>
+                        <div style={{ color: theme.accent.red   }}>PE Δ</div>
+                      </div>
+
+                      {(chainData.data.expiryData as HistoricalChainRow[]).map((row, i) => (
+                        <div key={i} className="grid text-center rounded-md"
+                          style={{
+                            gridTemplateColumns: "1fr 1fr 76px 1fr 1fr",
+                            background : row.atm ? theme.accent.cyan + "12" : i % 2 === 0 ? theme.bg.surface : theme.bg.surfaceAlt,
+                            border     : row.atm ? `1px solid ${theme.accent.cyan}40` : "1px solid transparent",
+                            padding    : "6px 2px",
+                            fontSize   : 13,
+                          }}>
+                          <div style={{ color: theme.text.faint }}>{row.ce_delta.toFixed(2)}</div>
+                          <div style={{ color: theme.accent.green, fontWeight: row.atm ? 800 : 600 }}>₹{fmt(row.ce_ltp)}</div>
+                          <div style={{
+                            color: row.atm ? theme.accent.cyan : theme.text.secondary, fontWeight: 700,
+                            background: row.atm ? theme.accent.cyan + "15" : "none", borderRadius: 4,
+                          }}>{row.strike}</div>
+                          <div style={{ color: theme.accent.red, fontWeight: row.atm ? 800 : 600 }}>₹{fmt(row.pe_ltp)}</div>
+                          <div style={{ color: theme.text.faint }}>{row.pe_delta.toFixed(2)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </Card>
             </>
           )}
