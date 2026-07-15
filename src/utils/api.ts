@@ -82,12 +82,17 @@ export const fetchPortfolioSummary = () =>
 
 // ─── Backtest ─────────────────────────────────────────────────────────────────
 export const runBacktest = (params: {
+  symbol  ?: string;
   strategy: string;
   days    : number;
   sl_pct  : number;
   tgt_pct : number;
   lot_size: number;
 }) => post<BacktestResponse>("/backtest", params);
+
+// ─── Historical ──────────────────────────────────────────────────────────────
+export const fetchHistorical = (symbol: string, days = 30) =>
+  get<{ success: boolean; symbol: string; interval: string; candles: { t: number; open: number; high: number; low: number; close: number; volume: number }[]; mock: boolean }>(`/historical?symbol=${symbol}&days=${days}`);
 
 // ─── Funds ───────────────────────────────────────────────────────────────────
 export const fetchFunds = () =>
