@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { runBacktest } from "../utils/api";
+import { runBacktest, fetchHistorical } from "../utils/api";
 import Card from "../components/ui/Card";
 import Loader from "../components/ui/Loader";
 import ErrorBox from "../components/ui/ErrorBox";
@@ -46,11 +46,13 @@ function DataSourceBadge({ source, theme }: { source?: "LIVE" | "MOCK"; theme: T
   );
 }
 
+type Mode = "single" | "compare" | "historical";
+
 export default function Backtest() {
   const theme = useTheme();
   const COLORS = [theme.accent.cyan, theme.accent.orange, theme.accent.purple, theme.accent.red, theme.accent.green];
 
-  const [mode, setMode] = useState<"single" | "compare">("single");
+  const [mode, setMode] = useState<Mode>("single");
 
   // Shared params
   const [symbol,   setSymbol]   = useState("NIFTY");
@@ -106,6 +108,23 @@ export default function Backtest() {
     }
   };
 
+  // Historical data mode
+  const [histData, setHistData]       = useState<any>(null);
+  const [histLoading, setHistLoading] = useState(false);
+  const [histError, setHistError]     = useState(false);
+
+  const loadHistorical = async () => {
+    setHistLoading(true); setHistError(false); setHistData(null);
+    try {
+      const res = await fetchHistorical(symbol, days);
+      setHistData(res);
+    } catch {
+      setHistError(true);
+    } finally {
+      setHistLoading(false);
+    }
+  };
+
   const s = data?.summary;
   const fmt    = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 0 });
   const fmtPct = (n: number) => `${n.toFixed(1)}%`;
@@ -124,6 +143,22 @@ export default function Backtest() {
     }
     return rows;
   })();
+
+  // Historical candles → chart-friendly rows
+  const histChartData = (histData?.candles ?? []).map((c: any) => ({
+    date : new Date(c.t * 1000).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+    close: c.close,
+    high : c.high,
+    low  : c.low,
+  }));
+
+  const histStats = histChartData.length > 0 ? {
+    first: histChartData[0].close,
+    last : histChartData[histChartData.length - 1].close,
+    high : Math.max(...histChartData.map((c: any) => c.high)),
+    low  : Math.min(...histChartData.map((c: any) => c.low)),
+  } : null;
+  const histChangePct = histStats ? ((histStats.last - histStats.first) / histStats.first) * 100 : 0;
 
   return (
     <div className="p-4 space-y-4">
@@ -148,111 +183,198 @@ export default function Backtest() {
           }}>
           Compare Strategies
         </button>
+        <button onClick={() => setMode("historical")}
+          className="flex-1 py-2 rounded-xl text-sm font-bold"
+          style={{
+            background: mode === "historical" ? theme.accent.cyan : theme.bg.surfaceAlt,
+            color     : mode === "historical" ? theme.bg.page : theme.text.muted,
+            border    : `1px solid ${theme.border.subtle}`,
+          }}>
+          Historical Data
+        </button>
       </div>
 
-      {/* Shared params */}
-      <Card title="Backtest Configuration">
-        <div className="space-y-3">
-
-          {/* Symbol + historical data source */}
-          <div>
-            <div className="text-sm mb-1" style={{ color: theme.text.muted }}>Symbol (historical data)</div>
-            <div className="flex rounded-lg overflow-hidden"
-              style={{ border: `1px solid ${theme.border.subtle}` }}>
-              {SYMBOLS.map(sym => (
-                <button key={sym} onClick={() => setSymbol(sym)}
-                  className="flex-1 py-1.5 text-sm font-bold"
-                  style={{
-                    background: symbol === sym ? theme.accent.cyan : theme.bg.surfaceAlt,
-                    color     : symbol === sym ? theme.bg.page : theme.text.muted,
-                  }}>
-                  {sym}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {mode === "single" && (
-            <div>
-              <div className="text-sm mb-1" style={{ color: theme.text.muted }}>Strategy</div>
-              <div className="flex flex-wrap gap-1">
-                {STRATEGIES.map(st => (
-                  <button key={st.key} onClick={() => setStrategy(st.key)}
-                    className="px-3 py-1.5 rounded-lg text-sm font-bold"
-                    style={{
-                      background: strategy === st.key ? theme.accent.cyan : theme.bg.surfaceAlt,
-                      color     : strategy === st.key ? theme.bg.page : theme.text.muted,
-                      border    : `1px solid ${theme.border.subtle}`,
-                    }}>
-                    {st.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {mode === "compare" && (
-            <div>
-              <div className="text-sm mb-1" style={{ color: theme.text.muted }}>
-                Select 2+ strategies to compare
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {STRATEGIES.map((st, i) => {
-                  const on = selected.includes(st.key);
-                  return (
-                    <button key={st.key} onClick={() => toggleSelected(st.key)}
-                      className="px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1"
-                      style={{
-                        background: on ? `${COLORS[i % COLORS.length]}20` : theme.bg.surfaceAlt,
-                        color     : on ? COLORS[i % COLORS.length] : theme.text.muted,
-                        border    : `1px solid ${on ? COLORS[i % COLORS.length] : theme.border.subtle}`,
-                      }}>
-                      {on && <span style={{ width: 6, height: 6, borderRadius: 99, background: COLORS[i % COLORS.length] }} />}
-                      {st.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { label: "Days",     value: days,    setter: setDays,    min: 10,  max: 365 },
-              { label: "SL %",     value: slPct,   setter: setSlPct,   min: 10,  max: 200 },
-              { label: "Target %", value: tgtPct,  setter: setTgtPct,  min: 10,  max: 200 },
-              { label: "Lot Size", value: lotSize, setter: setLotSize, min: 1,   max: 500 },
-            ].map(({ label, value, setter, min, max }) => (
-              <div key={label}>
-                <div className="text-sm mb-1" style={{ color: theme.text.muted }}>{label}: <span style={{ color: theme.accent.cyan }}>{value}</span></div>
-                <input type="range" min={min} max={max} value={value}
-                  onChange={e => setter(Number(e.target.value))}
-                  className="w-full" />
-              </div>
-            ))}
-          </div>
-
-          {mode === "single" ? (
-            <button onClick={runSingle}
-              disabled={isPending}
-              className="w-full py-2.5 rounded-xl text-sm font-black"
-              style={{ background: theme.accent.cyan, color: theme.bg.page, opacity: isPending ? 0.7 : 1 }}>
-              {isPending ? "Running Backtest..." : "▶ Run Backtest"}
-            </button>
-          ) : (
-            <button onClick={runCompare}
-              disabled={isComparing || selected.length < 2}
-              className="w-full py-2.5 rounded-xl text-sm font-black"
+      {/* Symbol selector — shared across all modes */}
+      <Card title="Symbol (historical data source)">
+        <div className="flex rounded-lg overflow-hidden"
+          style={{ border: `1px solid ${theme.border.subtle}` }}>
+          {SYMBOLS.map(sym => (
+            <button key={sym} onClick={() => setSymbol(sym)}
+              className="flex-1 py-1.5 text-sm font-bold"
               style={{
-                background: theme.accent.cyan,
-                color     : theme.bg.page,
-                opacity   : (isComparing || selected.length < 2) ? 0.5 : 1,
+                background: symbol === sym ? theme.accent.cyan : theme.bg.surfaceAlt,
+                color     : symbol === sym ? theme.bg.page : theme.text.muted,
               }}>
-              {isComparing ? "Comparing..." : selected.length < 2 ? "Select 2+ strategies" : "▶ Run Comparison"}
+              {sym}
             </button>
-          )}
+          ))}
         </div>
       </Card>
+
+      {/* ── HISTORICAL DATA MODE ── */}
+      {mode === "historical" && (
+        <>
+          <Card title="Load Historical Data">
+            <div className="space-y-3">
+              <div>
+                <div className="text-sm mb-1" style={{ color: theme.text.muted }}>
+                  Days: <span style={{ color: theme.accent.cyan }}>{days}</span>
+                </div>
+                <input type="range" min={10} max={365} value={days}
+                  onChange={e => setDays(Number(e.target.value))}
+                  className="w-full" />
+              </div>
+              <button onClick={loadHistorical}
+                disabled={histLoading}
+                className="w-full py-2.5 rounded-xl text-sm font-black"
+                style={{ background: theme.accent.cyan, color: theme.bg.page, opacity: histLoading ? 0.7 : 1 }}>
+                {histLoading ? "Loading..." : `▶ Load ${symbol} Historical Data`}
+              </button>
+            </div>
+          </Card>
+
+          {histLoading && <Loader text="Fetching historical candles..." />}
+          {histError   && <ErrorBox message="Failed to load historical data" />}
+
+          {histData && histStats && (
+            <>
+              <div className="flex justify-end">
+                <DataSourceBadge source={histData.mock ? "MOCK" : "LIVE"} theme={theme} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <StatBox theme={theme} label={`${symbol} — ${days}d ago`} value={`₹${fmt(histStats.first)}`} color={theme.text.secondary} />
+                <StatBox theme={theme} label={`${symbol} — Latest`}       value={`₹${fmt(histStats.last)}`}  color={theme.accent.cyan} />
+                <StatBox theme={theme} label="Period High"                value={`₹${fmt(histStats.high)}`}  color={theme.accent.green} />
+                <StatBox theme={theme} label="Period Low"                 value={`₹${fmt(histStats.low)}`}   color={theme.accent.red} />
+              </div>
+
+              <div className="rounded-xl p-3 text-center"
+                style={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}` }}>
+                <div className="text-sm mb-1" style={{ color: theme.text.muted }}>Change over period</div>
+                <div className="text-xl font-black"
+                  style={{ color: histChangePct >= 0 ? theme.accent.green : theme.accent.red }}>
+                  {histChangePct >= 0 ? "+" : ""}{histChangePct.toFixed(2)}%
+                </div>
+              </div>
+
+              <Card title={`${symbol} Price History (${histChartData.length} candles)`}>
+                <ResponsiveContainer width="100%" height={220}>
+                  <AreaChart data={histChartData}>
+                    <defs>
+                      <linearGradient id="histGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%"  stopColor={theme.accent.cyan} stopOpacity={0.3} />
+                        <stop offset="95%" stopColor={theme.accent.cyan} stopOpacity={0}   />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke={theme.border.subtle} strokeDasharray="3 3" />
+                    <XAxis dataKey="date" tick={{ fill: theme.text.muted, fontSize: 11 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                    <YAxis domain={["auto", "auto"]} tick={{ fill: theme.text.muted, fontSize: 11 }} tickFormatter={v => `${(v/1000).toFixed(1)}k`} axisLine={false} tickLine={false} width={44} />
+                    <Tooltip contentStyle={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, borderRadius: 8, fontSize: 13 }} formatter={(v: number) => [`₹${fmt(v)}`, "Close"]} />
+                    <Area type="monotone" dataKey="close" stroke={theme.accent.cyan} strokeWidth={2} fill="url(#histGrad)" dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </Card>
+            </>
+          )}
+
+          {!histData && !histLoading && (
+            <div className="text-center py-16" style={{ color: theme.text.muted }}>
+              <div className="text-4xl mb-3">📅</div>
+              <div className="text-sm">Load historical candles for {symbol}</div>
+              <div className="text-sm mt-1" style={{ color: theme.text.faint }}>Same data feeds the backtest engine</div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Shared params — single/compare */}
+      {mode !== "historical" && (
+        <Card title="Backtest Configuration">
+          <div className="space-y-3">
+
+            {mode === "single" && (
+              <div>
+                <div className="text-sm mb-1" style={{ color: theme.text.muted }}>Strategy</div>
+                <div className="flex flex-wrap gap-1">
+                  {STRATEGIES.map(st => (
+                    <button key={st.key} onClick={() => setStrategy(st.key)}
+                      className="px-3 py-1.5 rounded-lg text-sm font-bold"
+                      style={{
+                        background: strategy === st.key ? theme.accent.cyan : theme.bg.surfaceAlt,
+                        color     : strategy === st.key ? theme.bg.page : theme.text.muted,
+                        border    : `1px solid ${theme.border.subtle}`,
+                      }}>
+                      {st.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {mode === "compare" && (
+              <div>
+                <div className="text-sm mb-1" style={{ color: theme.text.muted }}>
+                  Select 2+ strategies to compare
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {STRATEGIES.map((st, i) => {
+                    const on = selected.includes(st.key);
+                    return (
+                      <button key={st.key} onClick={() => toggleSelected(st.key)}
+                        className="px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1"
+                        style={{
+                          background: on ? `${COLORS[i % COLORS.length]}20` : theme.bg.surfaceAlt,
+                          color     : on ? COLORS[i % COLORS.length] : theme.text.muted,
+                          border    : `1px solid ${on ? COLORS[i % COLORS.length] : theme.border.subtle}`,
+                        }}>
+                        {on && <span style={{ width: 6, height: 6, borderRadius: 99, background: COLORS[i % COLORS.length] }} />}
+                        {st.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: "Days",     value: days,    setter: setDays,    min: 10,  max: 365 },
+                { label: "SL %",     value: slPct,   setter: setSlPct,   min: 10,  max: 200 },
+                { label: "Target %", value: tgtPct,  setter: setTgtPct,  min: 10,  max: 200 },
+                { label: "Lot Size", value: lotSize, setter: setLotSize, min: 1,   max: 500 },
+              ].map(({ label, value, setter, min, max }) => (
+                <div key={label}>
+                  <div className="text-sm mb-1" style={{ color: theme.text.muted }}>{label}: <span style={{ color: theme.accent.cyan }}>{value}</span></div>
+                  <input type="range" min={min} max={max} value={value}
+                    onChange={e => setter(Number(e.target.value))}
+                    className="w-full" />
+                </div>
+              ))}
+            </div>
+
+            {mode === "single" ? (
+              <button onClick={runSingle}
+                disabled={isPending}
+                className="w-full py-2.5 rounded-xl text-sm font-black"
+                style={{ background: theme.accent.cyan, color: theme.bg.page, opacity: isPending ? 0.7 : 1 }}>
+                {isPending ? "Running Backtest..." : "▶ Run Backtest"}
+              </button>
+            ) : (
+              <button onClick={runCompare}
+                disabled={isComparing || selected.length < 2}
+                className="w-full py-2.5 rounded-xl text-sm font-black"
+                style={{
+                  background: theme.accent.cyan,
+                  color     : theme.bg.page,
+                  opacity   : (isComparing || selected.length < 2) ? 0.5 : 1,
+                }}>
+                {isComparing ? "Comparing..." : selected.length < 2 ? "Select 2+ strategies" : "▶ Run Comparison"}
+              </button>
+            )}
+          </div>
+        </Card>
+      )}
 
       {/* SINGLE MODE RESULTS */}
       {mode === "single" && (
