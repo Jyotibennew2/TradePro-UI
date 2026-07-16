@@ -81,24 +81,37 @@ export const fetchHistoricalChain = (params: {
 };
 
 // ─── Real Archived Option Chain (saved automatically every ~5 min) ───────────
+// IV + Greeks are backed out from the real saved LTP at capture time
+// (assumed days-to-expiry — see days_to_expiry_used on the response).
 export interface ArchivedChainRow {
-  strike: number;
-  ce_ltp: number;
-  pe_ltp: number;
-  ce_oi?: number;
-  pe_oi?: number;
-  atm   : boolean;
+  strike  : number;
+  ce_ltp  : number;
+  pe_ltp  : number;
+  ce_oi?  : number;
+  pe_oi?  : number;
+  ce_iv?  : number;
+  pe_iv?  : number;
+  ce_delta?: number;
+  pe_delta?: number;
+  ce_gamma?: number;
+  pe_gamma?: number;
+  ce_theta?: number;
+  pe_theta?: number;
+  ce_vega? : number;
+  pe_vega? : number;
+  atm     : boolean;
 }
 
 export interface ArchivedChainResponse {
-  success      : boolean;
-  symbol       : string;
-  date         : string;
-  spot         : number;
-  saved_at     : number;
-  reconstructed: false;
-  was_mock     : boolean;
-  note         : string;
+  success            : boolean;
+  symbol             : string;
+  date               : string;
+  spot               : number;
+  saved_at           : number;
+  reconstructed      : false;
+  was_mock           : boolean;
+  days_to_expiry_used?: number;
+  note               : string;
   data: {
     expiryData: ArchivedChainRow[];
     atmIndex  : number;
