@@ -391,8 +391,9 @@ export default function Backtest() {
                 <div className="space-y-3">
                   <div className="text-sm" style={{ color: theme.text.faint }}>
                     Fyers doesn't provide real historical option-chain quotes for expired contracts. For dates
-                    TradePro was running (auto-saved every ~5 min), you'll see a "Load REAL saved chain" option below.
-                    For older dates, only a Black-Scholes reconstruction is possible.
+                    TradePro was running (auto-saved every ~5 min), you'll see a "Load REAL saved chain" option below,
+                    complete with IV and Greeks backed out from the real LTP. For older dates, only a Black-Scholes
+                    reconstruction is possible.
                   </div>
 
                   <div>
@@ -457,12 +458,20 @@ export default function Backtest() {
                         </span>
                       </div>
 
+                      {chainIsReal && (chainData.data.expiryData as ArchivedChainRow[]).some(r => r.ce_iv != null) && (
+                        <div className="text-sm px-1" style={{ color: theme.text.faint }}>
+                          IV/Greeks assume {chainData.days_to_expiry_used ?? 7}d to expiry (nearest weekly contract) — real LTP/OI is exact.
+                        </div>
+                      )}
+
                       <div className="grid text-center px-1 font-semibold"
-                        style={{ gridTemplateColumns: chainIsReal ? "1fr 1fr 76px 1fr 1fr" : "1fr 1fr 76px 1fr 1fr", fontSize: 11, color: theme.text.faint }}>
+                        style={{ gridTemplateColumns: "0.8fr 0.9fr 1fr 76px 1fr 0.9fr 0.8fr", fontSize: 10, color: theme.text.faint }}>
                         <div style={{ color: theme.accent.green }}>{chainIsReal ? "CE OI" : "CE Δ"}</div>
+                        <div style={{ color: theme.accent.green }}>{chainIsReal ? "CE IV" : ""}</div>
                         <div style={{ color: theme.accent.green }}>CE LTP</div>
                         <div style={{ color: theme.accent.cyan  }}>STRIKE</div>
                         <div style={{ color: theme.accent.red   }}>PE LTP</div>
+                        <div style={{ color: theme.accent.red   }}>{chainIsReal ? "PE IV" : ""}</div>
                         <div style={{ color: theme.accent.red   }}>{chainIsReal ? "PE OI" : "PE Δ"}</div>
                       </div>
 
@@ -470,38 +479,42 @@ export default function Backtest() {
                         ? (chainData.data.expiryData as ArchivedChainRow[]).map((row, i) => (
                           <div key={i} className="grid text-center rounded-md"
                             style={{
-                              gridTemplateColumns: "1fr 1fr 76px 1fr 1fr",
+                              gridTemplateColumns: "0.8fr 0.9fr 1fr 76px 1fr 0.9fr 0.8fr",
                               background : row.atm ? theme.accent.cyan + "12" : i % 2 === 0 ? theme.bg.surface : theme.bg.surfaceAlt,
                               border     : row.atm ? `1px solid ${theme.accent.cyan}40` : "1px solid transparent",
                               padding    : "6px 2px",
-                              fontSize   : 13,
+                              fontSize   : 12,
                             }}>
                             <div style={{ color: theme.text.faint }}>{row.ce_oi != null ? (row.ce_oi / 100000).toFixed(1) + "L" : "-"}</div>
+                            <div style={{ color: theme.text.faint }}>{row.ce_iv != null ? row.ce_iv.toFixed(1) + "%" : "-"}</div>
                             <div style={{ color: theme.accent.green, fontWeight: row.atm ? 800 : 600 }}>₹{fmt(row.ce_ltp)}</div>
                             <div style={{
                               color: row.atm ? theme.accent.cyan : theme.text.secondary, fontWeight: 700,
                               background: row.atm ? theme.accent.cyan + "15" : "none", borderRadius: 4,
                             }}>{row.strike}</div>
                             <div style={{ color: theme.accent.red, fontWeight: row.atm ? 800 : 600 }}>₹{fmt(row.pe_ltp)}</div>
+                            <div style={{ color: theme.text.faint }}>{row.pe_iv != null ? row.pe_iv.toFixed(1) + "%" : "-"}</div>
                             <div style={{ color: theme.text.faint }}>{row.pe_oi != null ? (row.pe_oi / 100000).toFixed(1) + "L" : "-"}</div>
                           </div>
                         ))
                         : (chainData.data.expiryData as HistoricalChainRow[]).map((row, i) => (
                           <div key={i} className="grid text-center rounded-md"
                             style={{
-                              gridTemplateColumns: "1fr 1fr 76px 1fr 1fr",
+                              gridTemplateColumns: "0.8fr 0.9fr 1fr 76px 1fr 0.9fr 0.8fr",
                               background : row.atm ? theme.accent.cyan + "12" : i % 2 === 0 ? theme.bg.surface : theme.bg.surfaceAlt,
                               border     : row.atm ? `1px solid ${theme.accent.cyan}40` : "1px solid transparent",
                               padding    : "6px 2px",
-                              fontSize   : 13,
+                              fontSize   : 12,
                             }}>
                             <div style={{ color: theme.text.faint }}>{row.ce_delta.toFixed(2)}</div>
+                            <div />
                             <div style={{ color: theme.accent.green, fontWeight: row.atm ? 800 : 600 }}>₹{fmt(row.ce_ltp)}</div>
                             <div style={{
                               color: row.atm ? theme.accent.cyan : theme.text.secondary, fontWeight: 700,
                               background: row.atm ? theme.accent.cyan + "15" : "none", borderRadius: 4,
                             }}>{row.strike}</div>
                             <div style={{ color: theme.accent.red, fontWeight: row.atm ? 800 : 600 }}>₹{fmt(row.pe_ltp)}</div>
+                            <div />
                             <div style={{ color: theme.text.faint }}>{row.pe_delta.toFixed(2)}</div>
                           </div>
                         ))
