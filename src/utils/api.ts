@@ -80,6 +80,39 @@ export const fetchHistoricalChain = (params: {
   );
 };
 
+// ─── Real Archived Option Chain (saved automatically every ~5 min) ───────────
+export interface ArchivedChainRow {
+  strike: number;
+  ce_ltp: number;
+  pe_ltp: number;
+  ce_oi?: number;
+  pe_oi?: number;
+  atm   : boolean;
+}
+
+export interface ArchivedChainResponse {
+  success      : boolean;
+  symbol       : string;
+  date         : string;
+  spot         : number;
+  saved_at     : number;
+  reconstructed: false;
+  was_mock     : boolean;
+  note         : string;
+  data: {
+    expiryData: ArchivedChainRow[];
+    atmIndex  : number;
+  };
+}
+
+/** Fetch a real, previously-saved option-chain snapshot for a given date (YYYY-MM-DD). */
+export const fetchArchivedChain = (symbol: string, date: string) =>
+  get<ArchivedChainResponse>(`/optionchain/archive?symbol=${symbol}&date=${date}`);
+
+/** List which dates have at least one real saved snapshot for this symbol. */
+export const fetchArchivedDates = (symbol: string) =>
+  get<{ success: boolean; symbol: string; dates: string[] }>(`/optionchain/archive/dates?symbol=${symbol}`);
+
 // ─── Greeks ──────────────────────────────────────────────────────────────────
 export const fetchGreeks = (spot: number, strike: number, expiry: number, iv: number, type: string) =>
   get<GreeksResponse>(`/greeks?spot=${spot}&strike=${strike}&expiry=${expiry}&iv=${iv}&type=${type}`);
