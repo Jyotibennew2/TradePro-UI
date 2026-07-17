@@ -3,12 +3,14 @@ import { runBacktest, fetchHistorical, fetchHistoricalChain, fetchArchivedChain,
 import Card from "../components/ui/Card";
 import Loader from "../components/ui/Loader";
 import ErrorBox from "../components/ui/ErrorBox";
+import ChainColumnToggle from "../components/ui/ChainColumnToggle";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, ReferenceLine,
 } from "recharts";
 import { useTheme } from "../store/themeStore";
+import { useChainColumnsStore } from "../store/chainColumnsStore";
 import type { Theme } from "../styles/theme";
 
 const STRATEGIES = [
@@ -29,6 +31,16 @@ const TIMEFRAMES: { key: Timeframe; label: string; maxDays: number }[] = [
   { key: "1h",  label: "1 Hour", maxDays: 180 },
   { key: "2h",  label: "2 Hour", maxDays: 270 },
   { key: "1d",  label: "1 Day",  maxDays: 365 },
+];
+
+// Optional columns shown on both CE and PE sides (LTP + Strike are always shown)
+const OPTIONAL_COLS: { key: "oi" | "iv" | "delta" | "gamma" | "theta" | "vega"; fmt: (n: number) => string }[] = [
+  { key: "oi",    fmt: (n) => (n / 100000).toFixed(1) + "L" },
+  { key: "iv",    fmt: (n) => n.toFixed(1) + "%" },
+  { key: "delta", fmt: (n) => n.toFixed(2) },
+  { key: "gamma", fmt: (n) => n.toFixed(4) },
+  { key: "theta", fmt: (n) => n.toFixed(1) },
+  { key: "vega",  fmt: (n) => n.toFixed(1) },
 ];
 
 function StatBox({ label, value, color, theme }: { label: string; value: string; color: string; theme: Theme }) {
@@ -57,9 +69,11 @@ function DataSourceBadge({ source, theme }: { source?: "LIVE" | "MOCK"; theme: T
 }
 
 type Mode = "single" | "compare" | "historical";
+type AnyChainRow = HistoricalChainRow | ArchivedChainRow;
 
 export default function Backtest() {
   const theme = useTheme();
+  const { columns } = useChainColumnsStore();
   const COLORS = [theme.accent.cyan, theme.accent.orange, theme.accent.purple, theme.accent.red, theme.accent.green];
 
   const [mode, setMode] = useState<Mode>("single");
@@ -238,6 +252,10 @@ export default function Backtest() {
   } : null;
   const histChangePct = histStats ? ((histStats.last - histStats.first) / histStats.first) * 100 : 0;
 
+  // Column config for the option-chain table — OI only makes sense for real data (reconstructed has none)
+  const activeOptional = OPTIONAL_COLS.filter(c => columns[c.key] && (c.key !== "oi" || chainIsReal));
+  const gridTemplate = `${"0.8fr ".repeat(activeOptional.length)}1fr 76px 1fr ${"0.8fr ".repeat(activeOptional.length)}`.trim();
+
   return (
     <div className="p-4 space-y-4">
 
@@ -387,13 +405,13 @@ export default function Backtest() {
               </Card>
 
               {/* ── Historical Option Chain ── */}
-              <Card title="Historical Option Chain">
+              <Card title="Historical Option Chain" extra={<ChainColumnToggle />}>
                 <div className="space-y-3">
                   <div className="text-sm" style={{ color: theme.text.faint }}>
                     Fyers doesn't provide real historical option-chain quotes for expired contracts. For dates
                     TradePro was running (auto-saved every ~5 min), you'll see a "Load REAL saved chain" option below,
                     complete with IV and Greeks backed out from the real LTP. For older dates, only a Black-Scholes
-                    reconstruction is possible.
+                    reconstruction is possible. Use the columns icon above to show/hide OI, IV, Delta, Gamma, Theta, Vega.
                   </div>
 
                   <div>
@@ -464,61 +482,42 @@ export default function Backtest() {
                         </div>
                       )}
 
-                      <div className="grid text-center px-1 font-semibold"
-                        style={{ gridTemplateColumns: "0.8fr 0.9fr 1fr 76px 1fr 0.9fr 0.8fr", fontSize: 10, color: theme.text.faint }}>
-                        <div style={{ color: theme.accent.green }}>{chainIsReal ? "CE OI" : "CE Δ"}</div>
-                        <div style={{ color: theme.accent.green }}>{chainIsReal ? "CE IV" : ""}</div>
-                        <div style={{ color: theme.accent.green }}>CE LTP</div>
-                        <div style={{ color: theme.accent.cyan  }}>STRIKE</div>
-                        <div style={{ color: theme.accent.red   }}>PE LTP</div>
-                        <div style={{ color: theme.accent.red   }}>{chainIsReal ? "PE IV" : ""}</div>
-                        <div style={{ color: theme.accent.red   }}>{chainIsReal ? "PE OI" : "PE Δ"}</div>
-                      </div>
+                      {activeOptional.length > 0 && (
+                        <div className="grid text-center px-1 font-semibold"
+                          style={{ gridTemplateColumns: gridTemplate, fontSize: 10, color: theme.text.faint }}>
+                          {activeOptional.map(c => <div key={c.key} style={{ color: theme.accent.green }}>CE {c.key.toUpperCase()}</div>)}
+                          <div style={{ color: theme.accent.green }}>CE LTP</div>
+                          <div style={{ color: theme.accent.cyan  }}>STRIKE</div>
+                          <div style={{ color: theme.accent.red   }}>PE LTP</div>
+                          {activeOptional.map(c => <div key={c.key} style={{ color: theme.accent.red }}>PE {c.key.toUpperCase()}</div>)}
+                        </div>
+                      )}
 
-                      {chainIsReal
-                        ? (chainData.data.expiryData as ArchivedChainRow[]).map((row, i) => (
-                          <div key={i} className="grid text-center rounded-md"
-                            style={{
-                              gridTemplateColumns: "0.8fr 0.9fr 1fr 76px 1fr 0.9fr 0.8fr",
-                              background : row.atm ? theme.accent.cyan + "12" : i % 2 === 0 ? theme.bg.surface : theme.bg.surfaceAlt,
-                              border     : row.atm ? `1px solid ${theme.accent.cyan}40` : "1px solid transparent",
-                              padding    : "6px 2px",
-                              fontSize   : 12,
-                            }}>
-                            <div style={{ color: theme.text.faint }}>{row.ce_oi != null ? (row.ce_oi / 100000).toFixed(1) + "L" : "-"}</div>
-                            <div style={{ color: theme.text.faint }}>{row.ce_iv != null ? row.ce_iv.toFixed(1) + "%" : "-"}</div>
-                            <div style={{ color: theme.accent.green, fontWeight: row.atm ? 800 : 600 }}>₹{fmt(row.ce_ltp)}</div>
-                            <div style={{
-                              color: row.atm ? theme.accent.cyan : theme.text.secondary, fontWeight: 700,
-                              background: row.atm ? theme.accent.cyan + "15" : "none", borderRadius: 4,
-                            }}>{row.strike}</div>
-                            <div style={{ color: theme.accent.red, fontWeight: row.atm ? 800 : 600 }}>₹{fmt(row.pe_ltp)}</div>
-                            <div style={{ color: theme.text.faint }}>{row.pe_iv != null ? row.pe_iv.toFixed(1) + "%" : "-"}</div>
-                            <div style={{ color: theme.text.faint }}>{row.pe_oi != null ? (row.pe_oi / 100000).toFixed(1) + "L" : "-"}</div>
-                          </div>
-                        ))
-                        : (chainData.data.expiryData as HistoricalChainRow[]).map((row, i) => (
-                          <div key={i} className="grid text-center rounded-md"
-                            style={{
-                              gridTemplateColumns: "0.8fr 0.9fr 1fr 76px 1fr 0.9fr 0.8fr",
-                              background : row.atm ? theme.accent.cyan + "12" : i % 2 === 0 ? theme.bg.surface : theme.bg.surfaceAlt,
-                              border     : row.atm ? `1px solid ${theme.accent.cyan}40` : "1px solid transparent",
-                              padding    : "6px 2px",
-                              fontSize   : 12,
-                            }}>
-                            <div style={{ color: theme.text.faint }}>{row.ce_delta.toFixed(2)}</div>
-                            <div />
-                            <div style={{ color: theme.accent.green, fontWeight: row.atm ? 800 : 600 }}>₹{fmt(row.ce_ltp)}</div>
-                            <div style={{
-                              color: row.atm ? theme.accent.cyan : theme.text.secondary, fontWeight: 700,
-                              background: row.atm ? theme.accent.cyan + "15" : "none", borderRadius: 4,
-                            }}>{row.strike}</div>
-                            <div style={{ color: theme.accent.red, fontWeight: row.atm ? 800 : 600 }}>₹{fmt(row.pe_ltp)}</div>
-                            <div />
-                            <div style={{ color: theme.text.faint }}>{row.pe_delta.toFixed(2)}</div>
-                          </div>
-                        ))
-                      }
+                      {(chainData.data.expiryData as AnyChainRow[]).map((row, i) => (
+                        <div key={i} className="grid text-center rounded-md"
+                          style={{
+                            gridTemplateColumns: gridTemplate,
+                            background : row.atm ? theme.accent.cyan + "12" : i % 2 === 0 ? theme.bg.surface : theme.bg.surfaceAlt,
+                            border     : row.atm ? `1px solid ${theme.accent.cyan}40` : "1px solid transparent",
+                            padding    : "6px 2px",
+                            fontSize   : 12,
+                          }}>
+                          {activeOptional.map(c => {
+                            const v = (row as any)[`ce_${c.key}`];
+                            return <div key={c.key} style={{ color: theme.text.faint }}>{v != null ? c.fmt(v) : "-"}</div>;
+                          })}
+                          <div style={{ color: theme.accent.green, fontWeight: row.atm ? 800 : 600 }}>₹{fmt(row.ce_ltp)}</div>
+                          <div style={{
+                            color: row.atm ? theme.accent.cyan : theme.text.secondary, fontWeight: 700,
+                            background: row.atm ? theme.accent.cyan + "15" : "none", borderRadius: 4,
+                          }}>{row.strike}</div>
+                          <div style={{ color: theme.accent.red, fontWeight: row.atm ? 800 : 600 }}>₹{fmt(row.pe_ltp)}</div>
+                          {activeOptional.map(c => {
+                            const v = (row as any)[`pe_${c.key}`];
+                            return <div key={c.key} style={{ color: theme.text.faint }}>{v != null ? c.fmt(v) : "-"}</div>;
+                          })}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
