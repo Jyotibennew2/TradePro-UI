@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { runBacktest, fetchHistorical, fetchHistoricalChain, fetchArchivedChain, fetchArchivedDates, type Timeframe, type HistoricalChainRow, type ArchivedChainRow } from "../utils/api";
+import { useSimulatorStore, makeOptionLeg } from "../simulator/state/simulatorStore";
 import Card from "../components/ui/Card";
 import Loader from "../components/ui/Loader";
 import ErrorBox from "../components/ui/ErrorBox";
@@ -31,6 +33,11 @@ const TIMEFRAMES: { key: Timeframe; label: string; maxDays: number }[] = [
   { key: "1h",  label: "1 Hour", maxDays: 180 },
   { key: "2h",  label: "2 Hour", maxDays: 270 },
   { key: "1d",  label: "1 Day",  maxDays: 365 },
+];
+
+const EXPIRY_PRESETS = [
+  { label: "Weekly (7d)",   days: 7  },
+  { label: "Monthly (30d)", days: 30 },
 ];
 
 // Optional columns shown on both CE and PE sides (LTP + Strike are always shown)
@@ -73,10 +80,13 @@ type AnyChainRow = HistoricalChainRow | ArchivedChainRow;
 
 export default function Backtest() {
   const theme = useTheme();
+  const navigate = useNavigate();
   const { columns } = useChainColumnsStore();
+  const { addLeg } = useSimulatorStore();
   const COLORS = [theme.accent.cyan, theme.accent.orange, theme.accent.purple, theme.accent.red, theme.accent.green];
 
   const [mode, setMode] = useState<Mode>("single");
+  const [legMsg, setLegMsg] = useState("");
 
   // Shared params
   const [symbol,     setSymbol]     = useState("NIFTY");
@@ -189,7 +199,7 @@ export default function Backtest() {
         ? new Date(candle.t * 1000).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
         : new Date(candle.t * 1000).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
       const res = await fetchHistoricalChain({
-        symbol, spot: candle.close, iv: chainIv, daysToExpiry: chainDte, strikecount: 8, label,
+        symbol, spot: candle.close, iv: chainIv, daysToExpiry: chainDte, strikecount: 15, label,
       });
       setChainData(res);
     } catch {
@@ -213,6 +223,16 @@ export default function Backtest() {
   };
 
   function isIntradayGlobal(r: Timeframe) { return r !== "1d"; }
+
+  /** Send a strike from historical data into the Simulator's leg builder for payoff/backtest analysis. */
+  const handleAddLeg = (row: AnyChainRow, optType: "CE" | "PE", action: "BUY" | "SELL") => {
+    const ltp = optType === "CE" ? row.ce_ltp : row.pe_ltp;
+    if (ltp == null) return;
+    const iv = ((row as any)[`${optType.toLowerCase()}_iv`] ?? chainIv) as number;
+    addLeg(makeOptionLeg(symbol as "NIFTY" | "BANKNIFTY", row.strike, optType, action, 1, ltp, iv, ""));
+    setLegMsg(`✓ Added ${action} ${row.strike} ${optType} to Simulator`);
+    setTimeout(() => setLegMsg(""), 2500);
+  };
 
   const s = data?.summary;
   const fmt    = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 0 });
@@ -411,7 +431,9 @@ export default function Backtest() {
                     Fyers doesn't provide real historical option-chain quotes for expired contracts. For dates
                     TradePro was running (auto-saved every ~5 min), you'll see a "Load REAL saved chain" option below,
                     complete with IV and Greeks backed out from the real LTP. For older dates, only a Black-Scholes
-                    reconstruction is possible. Use the columns icon above to show/hide OI, IV, Delta, Gamma, Theta, Vega.
+                    reconstruction is possible. Tap <b style={{ color: theme.accent.green }}>B</b>/<b style={{ color: theme.accent.red }}>S</b> on
+                    any strike to send it to the Simulator as a leg — build a multi-leg strategy from historical strikes and
+                    analyze its payoff there.
                   </div>
 
                   <div>
@@ -433,24 +455,40 @@ export default function Backtest() {
                       disabled={chainLoading}
                       className="w-full py-2 rounded-lg text-sm font-black"
                       style={{ background: theme.accent.green, color: theme.bg.page, opacity: chainLoading ? 0.7 : 1 }}>
-                      {chainLoading ? "Loading..." : "✓ Load REAL saved chain for this date"}
+                      {chainLoading ? "Loading..." : "✓ Load REAL saved chain (nearest weekly expiry, auto-captured)"}
                     </button>
                   )}
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <div className="text-sm mb-1" style={{ color: theme.text.muted }}>Assumed IV %</div>
-                      <input type="number" min={1} max={100} value={chainIv}
-                        onChange={e => setChainIv(Number(e.target.value))}
-                        className="w-full px-2 py-1.5 rounded-lg text-sm outline-none text-center"
-                        style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.accent.purple }} />
+                  <div>
+                    <div className="text-sm mb-1" style={{ color: theme.text.muted }}>Expiry for reconstruction</div>
+                    <div className="flex gap-1 mb-2">
+                      {EXPIRY_PRESETS.map(p => (
+                        <button key={p.label} onClick={() => setChainDte(p.days)}
+                          className="px-3 py-1 rounded-lg text-sm font-bold"
+                          style={{
+                            background: chainDte === p.days ? theme.accent.orange : theme.bg.surfaceAlt,
+                            color     : chainDte === p.days ? theme.bg.page : theme.text.muted,
+                            border    : `1px solid ${theme.border.subtle}`,
+                          }}>
+                          {p.label}
+                        </button>
+                      ))}
                     </div>
-                    <div>
-                      <div className="text-sm mb-1" style={{ color: theme.text.muted }}>Days to Expiry</div>
-                      <input type="number" min={1} max={90} value={chainDte}
-                        onChange={e => setChainDte(Number(e.target.value))}
-                        className="w-full px-2 py-1.5 rounded-lg text-sm outline-none text-center"
-                        style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.accent.orange }} />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <div className="text-sm mb-1" style={{ color: theme.text.muted }}>Assumed IV %</div>
+                        <input type="number" min={1} max={100} value={chainIv}
+                          onChange={e => setChainIv(Number(e.target.value))}
+                          className="w-full px-2 py-1.5 rounded-lg text-sm outline-none text-center"
+                          style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.accent.purple }} />
+                      </div>
+                      <div>
+                        <div className="text-sm mb-1" style={{ color: theme.text.muted }}>Days to Expiry</div>
+                        <input type="number" min={1} max={90} value={chainDte}
+                          onChange={e => setChainDte(Number(e.target.value))}
+                          className="w-full px-2 py-1.5 rounded-lg text-sm outline-none text-center"
+                          style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.accent.orange }} />
+                      </div>
                     </div>
                   </div>
 
@@ -462,6 +500,14 @@ export default function Backtest() {
                   </button>
 
                   {chainError && <ErrorBox message="Failed to load option chain for this date" />}
+                  {legMsg && (
+                    <div className="text-sm text-center py-1.5 rounded-lg flex items-center justify-center gap-2"
+                      style={{ background: theme.accent.green + "15", color: theme.accent.green }}>
+                      {legMsg}
+                      <button onClick={() => navigate("/simulator")}
+                        className="underline font-bold">Open Simulator</button>
+                    </div>
+                  )}
 
                   {chainData && (
                     <div className="space-y-2">
@@ -478,13 +524,14 @@ export default function Backtest() {
 
                       {chainIsReal && (chainData.data.expiryData as ArchivedChainRow[]).some(r => r.ce_iv != null) && (
                         <div className="text-sm px-1" style={{ color: theme.text.faint }}>
-                          IV/Greeks assume {chainData.days_to_expiry_used ?? 7}d to expiry (nearest weekly contract) — real LTP/OI is exact.
+                          Nearest weekly expiry (Fyers default), auto-captured. IV/Greeks assume {chainData.days_to_expiry_used ?? 7}d
+                          to expiry — real LTP/OI is exact.
                         </div>
                       )}
 
                       {activeOptional.length > 0 && (
-                        <div className="grid text-center px-1 font-semibold"
-                          style={{ gridTemplateColumns: gridTemplate, fontSize: 10, color: theme.text.faint }}>
+                        <div className="grid text-center px-1 font-semibold sticky top-0"
+                          style={{ gridTemplateColumns: gridTemplate, fontSize: 10, color: theme.text.faint, background: theme.bg.surfaceAlt }}>
                           {activeOptional.map(c => <div key={c.key} style={{ color: theme.accent.green }}>CE {c.key.toUpperCase()}</div>)}
                           <div style={{ color: theme.accent.green }}>CE LTP</div>
                           <div style={{ color: theme.accent.cyan  }}>STRIKE</div>
@@ -493,31 +540,54 @@ export default function Backtest() {
                         </div>
                       )}
 
-                      {(chainData.data.expiryData as AnyChainRow[]).map((row, i) => (
-                        <div key={i} className="grid text-center rounded-md"
-                          style={{
-                            gridTemplateColumns: gridTemplate,
-                            background : row.atm ? theme.accent.cyan + "12" : i % 2 === 0 ? theme.bg.surface : theme.bg.surfaceAlt,
-                            border     : row.atm ? `1px solid ${theme.accent.cyan}40` : "1px solid transparent",
-                            padding    : "6px 2px",
-                            fontSize   : 12,
-                          }}>
-                          {activeOptional.map(c => {
-                            const v = (row as any)[`ce_${c.key}`];
-                            return <div key={c.key} style={{ color: theme.text.faint }}>{v != null ? c.fmt(v) : "-"}</div>;
-                          })}
-                          <div style={{ color: theme.accent.green, fontWeight: row.atm ? 800 : 600 }}>₹{fmt(row.ce_ltp)}</div>
-                          <div style={{
-                            color: row.atm ? theme.accent.cyan : theme.text.secondary, fontWeight: 700,
-                            background: row.atm ? theme.accent.cyan + "15" : "none", borderRadius: 4,
-                          }}>{row.strike}</div>
-                          <div style={{ color: theme.accent.red, fontWeight: row.atm ? 800 : 600 }}>₹{fmt(row.pe_ltp)}</div>
-                          {activeOptional.map(c => {
-                            const v = (row as any)[`pe_${c.key}`];
-                            return <div key={c.key} style={{ color: theme.text.faint }}>{v != null ? c.fmt(v) : "-"}</div>;
-                          })}
-                        </div>
-                      ))}
+                      {/* Scrollable strike list — reach far OTM strikes on both sides */}
+                      <div className="max-h-[420px] overflow-y-auto space-y-0.5 pr-1">
+                        {(chainData.data.expiryData as AnyChainRow[]).map((row, i) => (
+                          <div key={i} className="grid text-center rounded-md"
+                            style={{
+                              gridTemplateColumns: gridTemplate,
+                              background : row.atm ? theme.accent.cyan + "12" : i % 2 === 0 ? theme.bg.surface : theme.bg.surfaceAlt,
+                              border     : row.atm ? `1px solid ${theme.accent.cyan}40` : "1px solid transparent",
+                              padding    : "6px 2px",
+                              fontSize   : 12,
+                            }}>
+                            {activeOptional.map(c => {
+                              const v = (row as any)[`ce_${c.key}`];
+                              return <div key={c.key} style={{ color: theme.text.faint }}>{v != null ? c.fmt(v) : "-"}</div>;
+                            })}
+                            <div>
+                              <div style={{ color: theme.accent.green, fontWeight: row.atm ? 800 : 600 }}>₹{fmt(row.ce_ltp)}</div>
+                              {row.ce_ltp != null && (
+                                <div className="flex gap-1 justify-center mt-0.5">
+                                  <button onClick={() => handleAddLeg(row, "CE", "BUY")}
+                                    className="text-xs px-1.5 rounded font-bold" style={{ background: theme.accent.green + "20", color: theme.accent.green }}>B</button>
+                                  <button onClick={() => handleAddLeg(row, "CE", "SELL")}
+                                    className="text-xs px-1.5 rounded font-bold" style={{ background: theme.accent.red + "20", color: theme.accent.red }}>S</button>
+                                </div>
+                              )}
+                            </div>
+                            <div style={{
+                              color: row.atm ? theme.accent.cyan : theme.text.secondary, fontWeight: 700,
+                              background: row.atm ? theme.accent.cyan + "15" : "none", borderRadius: 4,
+                            }}>{row.strike}</div>
+                            <div>
+                              <div style={{ color: theme.accent.red, fontWeight: row.atm ? 800 : 600 }}>₹{fmt(row.pe_ltp)}</div>
+                              {row.pe_ltp != null && (
+                                <div className="flex gap-1 justify-center mt-0.5">
+                                  <button onClick={() => handleAddLeg(row, "PE", "BUY")}
+                                    className="text-xs px-1.5 rounded font-bold" style={{ background: theme.accent.green + "20", color: theme.accent.green }}>B</button>
+                                  <button onClick={() => handleAddLeg(row, "PE", "SELL")}
+                                    className="text-xs px-1.5 rounded font-bold" style={{ background: theme.accent.red + "20", color: theme.accent.red }}>S</button>
+                                </div>
+                              )}
+                            </div>
+                            {activeOptional.map(c => {
+                              const v = (row as any)[`pe_${c.key}`];
+                              return <div key={c.key} style={{ color: theme.text.faint }}>{v != null ? c.fmt(v) : "-"}</div>;
+                            })}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
