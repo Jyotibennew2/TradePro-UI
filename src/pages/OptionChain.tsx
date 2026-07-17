@@ -3,8 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchChain } from "../utils/api";
 import Loader from "../components/ui/Loader";
 import ErrorBox from "../components/ui/ErrorBox";
+import ChainColumnToggle from "../components/ui/ChainColumnToggle";
 import { RefreshCw } from "lucide-react";
 import { useTheme } from "../store/themeStore";
+import { useChainColumnsStore, type ChainColumns } from "../store/chainColumnsStore";
 
 const SYMBOLS = ["NIFTY", "BANKNIFTY"];
 
@@ -29,7 +31,11 @@ function parseChain(data: any, mock: boolean) {
         strike: k,
         ce_ltp: ceMap[k]?.ltp, pe_ltp: peMap[k]?.ltp,
         ce_oi : ceMap[k]?.oi,  pe_oi : peMap[k]?.oi,
-        ce_iv : 0,             pe_iv : 0,
+        ce_iv   : ceMap[k]?.iv,    pe_iv   : peMap[k]?.iv,
+        ce_delta: ceMap[k]?.delta, pe_delta: peMap[k]?.delta,
+        ce_gamma: ceMap[k]?.gamma, pe_gamma: peMap[k]?.gamma,
+        ce_theta: ceMap[k]?.theta, pe_theta: peMap[k]?.theta,
+        ce_vega : ceMap[k]?.vega,  pe_vega : peMap[k]?.vega,
         atm   : k === atm,
       };
     });
@@ -40,8 +46,18 @@ function parseChain(data: any, mock: boolean) {
 
 type OnSelect = (strike: number, optionType: "CE" | "PE", action: "BUY" | "SELL", ltp: number) => void;
 
+// Optional columns shown on both CE and PE sides, in this order (nearest to LTP first)
+const OPTIONAL_COLS: { key: keyof ChainColumns; field: string; fmt: (n: number) => string }[] = [
+  { key: "iv",    field: "iv",    fmt: (n) => n.toFixed(1) + "%" },
+  { key: "delta", field: "delta", fmt: (n) => n.toFixed(2)       },
+  { key: "gamma", field: "gamma", fmt: (n) => n.toFixed(4)       },
+  { key: "theta", field: "theta", fmt: (n) => n.toFixed(1)       },
+  { key: "vega",  field: "vega",  fmt: (n) => n.toFixed(1)       },
+];
+
 export default function OptionChain({ onSelect }: { onSelect?: OnSelect } = {}) {
   const theme = useTheme();
+  const { columns } = useChainColumnsStore();
   const [symbol, setSymbol] = useState("NIFTY");
   const [expiry, setExpiry] = useState("");
 
@@ -60,6 +76,12 @@ export default function OptionChain({ onSelect }: { onSelect?: OnSelect } = {}) 
 
   const fmt    = (n?: number) => n != null ? n.toLocaleString("en-IN", { maximumFractionDigits: 1 }) : "-";
   const fmtOI  = (n?: number) => n != null ? (n / 100000).toFixed(1) + "L" : "-";
+
+  const activeOptional = OPTIONAL_COLS.filter(c => columns[c.key]);
+  const ceCols  = columns.oi ? ["oi", ...activeOptional.map(c => c.key)] : activeOptional.map(c => c.key);
+  const numExtraPerSide = ceCols.length;
+  // grid: [extra CE cols...] [CE LTP] [STRIKE] [PE LTP] [extra PE cols...]
+  const gridTemplate = `${"0.8fr ".repeat(numExtraPerSide)}1fr 76px 1fr ${"0.8fr ".repeat(numExtraPerSide)}`.trim();
 
   return (
     <div className="flex flex-col h-full">
@@ -101,17 +123,20 @@ export default function OptionChain({ onSelect }: { onSelect?: OnSelect } = {}) 
         </span>
 
         {/* Mock badge */}
-        <span className="text-sm px-2 py-0.5 rounded ml-auto font-bold"
+        <span className="text-sm px-2 py-0.5 rounded font-bold"
           style={{ background: isMock ? theme.accent.orange + "20" : theme.accent.green + "20", color: isMock ? theme.accent.orange : theme.accent.green }}>
           {isMock ? "MOCK" : "LIVE"}
         </span>
 
-        {/* Refresh */}
-        <button onClick={() => refetch()}
-          className="p-2 rounded-lg transition-all"
-          style={{ background: theme.border.subtle, color: theme.accent.cyan }}>
-          <RefreshCw size={16} className={isFetching ? "animate-spin" : ""} />
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <ChainColumnToggle />
+          {/* Refresh */}
+          <button onClick={() => refetch()}
+            className="p-2 rounded-lg transition-all"
+            style={{ background: theme.border.subtle, color: theme.accent.cyan }}>
+            <RefreshCw size={16} className={isFetching ? "animate-spin" : ""} />
+          </button>
+        </div>
       </div>
 
       {/* Table */}
@@ -123,14 +148,14 @@ export default function OptionChain({ onSelect }: { onSelect?: OnSelect } = {}) 
           <>
             {/* Header */}
             <div className="grid text-center mb-2 px-1 font-semibold"
-              style={{ gridTemplateColumns: "1fr 1fr 1fr 76px 1fr 1fr 1fr", fontSize: 11, color: theme.text.faint }}>
-              <div style={{ color: theme.accent.green }}>CE OI</div>
-              <div style={{ color: theme.accent.green }}>CE IV</div>
+              style={{ gridTemplateColumns: gridTemplate, fontSize: 10, color: theme.text.faint }}>
+              {columns.oi && <div style={{ color: theme.accent.green }}>CE OI</div>}
+              {activeOptional.map(c => <div key={c.key} style={{ color: theme.accent.green }}>CE {c.key.toUpperCase()}</div>)}
               <div style={{ color: theme.accent.green }}>CE LTP</div>
               <div style={{ color: theme.accent.cyan  }}>STRIKE</div>
               <div style={{ color: theme.accent.red   }}>PE LTP</div>
-              <div style={{ color: theme.accent.red   }}>PE IV</div>
-              <div style={{ color: theme.accent.red   }}>PE OI</div>
+              {activeOptional.map(c => <div key={c.key} style={{ color: theme.accent.red }}>PE {c.key.toUpperCase()}</div>)}
+              {columns.oi && <div style={{ color: theme.accent.red }}>PE OI</div>}
             </div>
 
             {/* Rows */}
@@ -140,14 +165,18 @@ export default function OptionChain({ onSelect }: { onSelect?: OnSelect } = {}) 
                 <div key={i}
                   className="grid text-center mb-0.5 rounded-md"
                   style={{
-                    gridTemplateColumns: "1fr 1fr 1fr 76px 1fr 1fr 1fr",
+                    gridTemplateColumns: gridTemplate,
                     background : isAtm ? theme.accent.cyan + "12" : i % 2 === 0 ? theme.bg.surface : theme.bg.surfaceAlt,
                     border     : isAtm ? `1px solid ${theme.accent.cyan}40` : "1px solid transparent",
                     padding    : "6px 2px",
-                    fontSize   : 13,
+                    fontSize   : 12,
                   }}>
-                  <div style={{ color: theme.text.faint }}>{fmtOI(row.ce_oi)}</div>
-                  <div style={{ color: theme.text.faint }}>{row.ce_iv ? row.ce_iv.toFixed(1) + "%" : "-"}</div>
+                  {columns.oi && <div style={{ color: theme.text.faint }}>{fmtOI(row.ce_oi)}</div>}
+                  {activeOptional.map(c => (
+                    <div key={c.key} style={{ color: theme.text.faint }}>
+                      {row[`ce_${c.field}`] != null ? c.fmt(row[`ce_${c.field}`]) : "-"}
+                    </div>
+                  ))}
                   <div>
                     <div style={{ color: theme.accent.green, fontWeight: isAtm ? 800 : 600 }}>
                       {row.ce_ltp != null ? "₹" + fmt(row.ce_ltp) : "-"}
@@ -182,8 +211,12 @@ export default function OptionChain({ onSelect }: { onSelect?: OnSelect } = {}) 
                       </div>
                     )}
                   </div>
-                  <div style={{ color: theme.text.faint }}>{row.pe_iv ? row.pe_iv.toFixed(1) + "%" : "-"}</div>
-                  <div style={{ color: theme.text.faint }}>{fmtOI(row.pe_oi)}</div>
+                  {activeOptional.map(c => (
+                    <div key={c.key} style={{ color: theme.text.faint }}>
+                      {row[`pe_${c.field}`] != null ? c.fmt(row[`pe_${c.field}`]) : "-"}
+                    </div>
+                  ))}
+                  {columns.oi && <div style={{ color: theme.text.faint }}>{fmtOI(row.pe_oi)}</div>}
                 </div>
               );
             })}
