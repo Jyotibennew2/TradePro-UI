@@ -50,6 +50,12 @@ export interface HistoricalChainRow {
   pe_iv   : number;
   ce_delta: number;
   pe_delta: number;
+  ce_gamma: number;
+  pe_gamma: number;
+  ce_theta: number;
+  pe_theta: number;
+  ce_vega : number;
+  pe_vega : number;
   atm     : boolean;
 }
 
