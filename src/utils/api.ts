@@ -41,6 +41,16 @@ export const fetchQuotes = (symbols: string = "NSE:NIFTY50-INDEX,NSE:NIFTYBANK-I
 export const fetchChain = (symbol: string, expiry = "", strikecount = 10) =>
   get<ChainResponse>(`/optionchain?symbol=${symbol}&expiry=${expiry}&strikecount=${strikecount}`);
 
+// ─── Expiries ────────────────────────────────────────────────────────────────
+export interface ExpiryOption {
+  expiry: string;   // raw Fyers value (unix timestamp string)
+  date  : string;   // DD-MM-YYYY
+}
+
+/** Live/available expiries for a symbol's option chain (weekly + monthly). */
+export const fetchExpiries = (symbol: string) =>
+  get<{ success: boolean; mock: boolean; expiries: ExpiryOption[] }>(`/optionchain/expiries?symbol=${symbol}`);
+
 // ─── Historical Option Chain (Black-Scholes reconstruction) ──────────────────
 export interface HistoricalChainRow {
   strike  : number;
@@ -86,7 +96,7 @@ export const fetchHistoricalChain = (params: {
   );
 };
 
-// ─── Real Archived Option Chain (saved automatically every ~5 min) ───────────
+// ─── Real Archived Option Chain (saved automatically every ~5 min, per expiry) ─
 // IV + Greeks are backed out from the real saved LTP at capture time
 // (assumed days-to-expiry — see days_to_expiry_used on the response).
 export interface ArchivedChainRow {
@@ -112,6 +122,7 @@ export interface ArchivedChainResponse {
   success            : boolean;
   symbol             : string;
   date               : string;
+  expiry             : string;   // YYYY-MM-DD contract expiry that was returned
   spot               : number;
   saved_at           : number;
   reconstructed      : false;
@@ -124,13 +135,33 @@ export interface ArchivedChainResponse {
   };
 }
 
-/** Fetch a real, previously-saved option-chain snapshot for a given date (YYYY-MM-DD). */
-export const fetchArchivedChain = (symbol: string, date: string) =>
-  get<ArchivedChainResponse>(`/optionchain/archive?symbol=${symbol}&date=${date}`);
+/**
+ * Fetch a real, previously-saved option-chain snapshot for a given capture
+ * date (YYYY-MM-DD). Pass `expiry` (YYYY-MM-DD, the contract's own expiry —
+ * see fetchArchivedExpiries) to pick a specific weekly/monthly contract;
+ * omit it to get whichever expiry was archived nearest to that date.
+ */
+export const fetchArchivedChain = (symbol: string, date: string, expiry?: string) =>
+  get<ArchivedChainResponse>(`/optionchain/archive?symbol=${symbol}&date=${date}${expiry ? `&expiry=${expiry}` : ""}`);
 
-/** List which dates have at least one real saved snapshot for this symbol. */
-export const fetchArchivedDates = (symbol: string) =>
-  get<{ success: boolean; symbol: string; dates: string[] }>(`/optionchain/archive/dates?symbol=${symbol}`);
+/**
+ * List which capture dates have at least one real saved snapshot.
+ * Pass `expiry` (YYYY-MM-DD) to restrict to that specific contract's dates;
+ * omit it for the union across all archived expiries.
+ */
+export const fetchArchivedDates = (symbol: string, expiry?: string) =>
+  get<{ success: boolean; symbol: string; expiry: string | null; dates: string[] }>(
+    `/optionchain/archive/dates?symbol=${symbol}${expiry ? `&expiry=${expiry}` : ""}`
+  );
+
+/**
+ * List archived expiry contracts (YYYY-MM-DD) for a symbol. Pass `date`
+ * (capture date) to restrict to expiries that have data for that day.
+ */
+export const fetchArchivedExpiries = (symbol: string, date?: string) =>
+  get<{ success: boolean; symbol: string; date: string | null; expiries: string[] }>(
+    `/optionchain/archive/expiries?symbol=${symbol}${date ? `&date=${date}` : ""}`
+  );
 
 // ─── Greeks ──────────────────────────────────────────────────────────────────
 export const fetchGreeks = (spot: number, strike: number, expiry: number, iv: number, type: string) =>
