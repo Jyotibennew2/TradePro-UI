@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { runBacktest, fetchHistorical, fetchHistoricalChain, fetchArchivedChain, fetchArchivedDates, type Timeframe, type HistoricalChainRow, type ArchivedChainRow } from "../utils/api";
+import { runBacktest, fetchHistorical, fetchHistoricalChain, fetchArchivedChain, fetchArchivedDates, fetchArchivedExpiries, type Timeframe, type HistoricalChainRow, type ArchivedChainRow } from "../utils/api";
 import { useSimulatorStore, makeOptionLeg } from "../simulator/state/simulatorStore";
 import Card from "../components/ui/Card";
 import Loader from "../components/ui/Loader";
@@ -103,7 +103,7 @@ export default function Backtest() {
     setDays(d => Math.min(d, activeTf.maxDays));
   }, [resolution]);
 
-  // Dates that have REAL saved option-chain snapshots (auto-captured every ~5 min)
+  // Dates that have REAL saved option-chain snapshots (auto-captured every ~5 min, across all expiries)
   const [archivedDates, setArchivedDates] = useState<string[]>([]);
   useEffect(() => {
     fetchArchivedDates(symbol).then(r => setArchivedDates(r.dates ?? [])).catch(() => setArchivedDates([]));
@@ -188,7 +188,22 @@ export default function Backtest() {
   const selectedDateStr = selectedCandle
     ? new Date(selectedCandle.t * 1000).toISOString().slice(0, 10)
     : "";
-  const hasRealData = archivedDates.includes(selectedDateStr);
+
+  // Which real expiry contracts were archived for the picked date? (weekly / next-weekly / monthly, each separate)
+  const [dateExpiries, setDateExpiries]       = useState<string[]>([]);
+  const [selectedExpiry, setSelectedExpiry]   = useState("");
+  useEffect(() => {
+    if (!selectedDateStr) { setDateExpiries([]); setSelectedExpiry(""); return; }
+    fetchArchivedExpiries(symbol, selectedDateStr)
+      .then(r => {
+        const exps = r.expiries ?? [];
+        setDateExpiries(exps);
+        setSelectedExpiry(exps[0] ?? "");
+      })
+      .catch(() => { setDateExpiries([]); setSelectedExpiry(""); });
+  }, [symbol, selectedDateStr]);
+
+  const hasRealData = dateExpiries.length > 0;
 
   const loadHistoricalChain = async () => {
     const candle = histData?.candles?.[candleIdx];
@@ -210,10 +225,10 @@ export default function Backtest() {
   };
 
   const loadRealArchivedChain = async () => {
-    if (!selectedDateStr) return;
+    if (!selectedDateStr || !selectedExpiry) return;
     setChainLoading(true); setChainError(false); setChainData(null); setChainIsReal(true);
     try {
-      const res = await fetchArchivedChain(symbol, selectedDateStr);
+      const res = await fetchArchivedChain(symbol, selectedDateStr, selectedExpiry);
       setChainData(res);
     } catch {
       setChainError(true);
@@ -237,6 +252,11 @@ export default function Backtest() {
   const s = data?.summary;
   const fmt    = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 0 });
   const fmtPct = (n: number) => `${n.toFixed(1)}%`;
+  const fmtExpiryLabel = (d: string) => {
+    try {
+      return new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+    } catch { return d; }
+  };
 
   // Build merged chart data for compare mode: index-based (trade sequence), not date-based
   const compareChartData = (() => {
@@ -429,11 +449,10 @@ export default function Backtest() {
                 <div className="space-y-3">
                   <div className="text-sm" style={{ color: theme.text.faint }}>
                     Fyers doesn't provide real historical option-chain quotes for expired contracts. For dates
-                    TradePro was running (auto-saved every ~5 min), you'll see a "Load REAL saved chain" option below,
-                    complete with IV and Greeks backed out from the real LTP. For older dates, only a Black-Scholes
+                    TradePro was running (auto-saved every ~5 min, for every expiry — weekly, next-weekly, monthly),
+                    you'll see real saved data with an expiry picker below. For older dates, only a Black-Scholes
                     reconstruction is possible. Tap <b style={{ color: theme.accent.green }}>B</b>/<b style={{ color: theme.accent.red }}>S</b> on
-                    any strike to send it to the Simulator as a leg — build a multi-leg strategy from historical strikes and
-                    analyze its payoff there.
+                    any strike to send it to the Simulator as a leg.
                   </div>
 
                   <div>
@@ -441,7 +460,7 @@ export default function Backtest() {
                       Pick a candle: <span style={{ color: theme.accent.cyan }}>{histChartData[candleIdx]?.date}</span> • Spot ₹{fmt(histData.candles[candleIdx]?.close ?? 0)}
                       {hasRealData && (
                         <span className="ml-2 px-1.5 py-0.5 rounded font-bold" style={{ background: theme.accent.green + "20", color: theme.accent.green }}>
-                          REAL DATA AVAILABLE
+                          {dateExpiries.length} EXPIRY{dateExpiries.length > 1 ? "IES" : ""} AVAILABLE
                         </span>
                       )}
                     </div>
@@ -451,12 +470,28 @@ export default function Backtest() {
                   </div>
 
                   {hasRealData && (
-                    <button onClick={loadRealArchivedChain}
-                      disabled={chainLoading}
-                      className="w-full py-2 rounded-lg text-sm font-black"
-                      style={{ background: theme.accent.green, color: theme.bg.page, opacity: chainLoading ? 0.7 : 1 }}>
-                      {chainLoading ? "Loading..." : "✓ Load REAL saved chain (nearest weekly expiry, auto-captured)"}
-                    </button>
+                    <div className="space-y-2">
+                      <div className="text-sm" style={{ color: theme.text.muted }}>Select expiry contract:</div>
+                      <div className="flex flex-wrap gap-1">
+                        {dateExpiries.map(exp => (
+                          <button key={exp} onClick={() => setSelectedExpiry(exp)}
+                            className="px-3 py-1.5 rounded-lg text-sm font-bold"
+                            style={{
+                              background: selectedExpiry === exp ? theme.accent.green : theme.bg.surfaceAlt,
+                              color     : selectedExpiry === exp ? theme.bg.page : theme.text.muted,
+                              border    : `1px solid ${theme.border.subtle}`,
+                            }}>
+                            {fmtExpiryLabel(exp)}
+                          </button>
+                        ))}
+                      </div>
+                      <button onClick={loadRealArchivedChain}
+                        disabled={chainLoading || !selectedExpiry}
+                        className="w-full py-2 rounded-lg text-sm font-black"
+                        style={{ background: theme.accent.green, color: theme.bg.page, opacity: chainLoading ? 0.7 : 1 }}>
+                        {chainLoading ? "Loading..." : `✓ Load REAL saved chain — ${selectedExpiry ? fmtExpiryLabel(selectedExpiry) : "..."} expiry`}
+                      </button>
+                    </div>
                   )}
 
                   <div>
@@ -512,7 +547,9 @@ export default function Backtest() {
                   {chainData && (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-sm px-1">
-                        <span style={{ color: theme.text.muted }}>{chainIsReal ? chainData.date : chainData.label}</span>
+                        <span style={{ color: theme.text.muted }}>
+                          {chainIsReal ? `${chainData.date} • expiry ${fmtExpiryLabel(chainData.expiry)}` : chainData.label}
+                        </span>
                         <span className="px-2 py-0.5 rounded font-bold"
                           style={{
                             background: chainIsReal ? theme.accent.green + "20" : theme.accent.orange + "20",
@@ -524,8 +561,7 @@ export default function Backtest() {
 
                       {chainIsReal && (chainData.data.expiryData as ArchivedChainRow[]).some(r => r.ce_iv != null) && (
                         <div className="text-sm px-1" style={{ color: theme.text.faint }}>
-                          Nearest weekly expiry (Fyers default), auto-captured. IV/Greeks assume {chainData.days_to_expiry_used ?? 7}d
-                          to expiry — real LTP/OI is exact.
+                          Real LTP/OI is exact for this specific expiry contract. IV/Greeks are backed out assuming {chainData.days_to_expiry_used ?? 7}d to expiry.
                         </div>
                       )}
 
