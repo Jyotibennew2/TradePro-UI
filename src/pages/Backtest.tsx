@@ -12,7 +12,7 @@ import {
   ResponsiveContainer, ReferenceLine,
 } from "recharts";
 import { useTheme } from "../store/themeStore";
-import { useChainColumnsStore } from "../store/chainColumnsStore";
+import { useChainColumnsStore, CHAIN_COLUMN_LABELS, type ChainColumns } from "../store/chainColumnsStore";
 import type { Theme } from "../styles/theme";
 
 const STRATEGIES = [
@@ -40,14 +40,23 @@ const EXPIRY_PRESETS = [
   { label: "Monthly (30d)", days: 30 },
 ];
 
-// Optional columns shown on both CE and PE sides (LTP + Strike are always shown)
-const OPTIONAL_COLS: { key: "oi" | "iv" | "delta" | "gamma" | "theta" | "vega"; fmt: (n: number) => string }[] = [
-  { key: "oi",    fmt: (n) => (n / 100000).toFixed(1) + "L" },
-  { key: "iv",    fmt: (n) => n.toFixed(1) + "%" },
-  { key: "delta", fmt: (n) => n.toFixed(2) },
-  { key: "gamma", fmt: (n) => n.toFixed(4) },
-  { key: "theta", fmt: (n) => n.toFixed(1) },
-  { key: "vega",  fmt: (n) => n.toFixed(1) },
+// Optional columns shown on both CE and PE sides (LTP + Strike are always shown).
+// `field` is the suffix used in row objects (ce_<field> / pe_<field>); `key`
+// is the matching toggle in the shared chainColumnsStore. oi/oiChange/volume/
+// bid/ask only exist on REAL archived data, not the Black-Scholes reconstruction.
+const REAL_ONLY_KEYS = new Set<keyof ChainColumns>(["oi", "oiChange", "volume", "bid", "ask"]);
+
+const OPTIONAL_COLS: { key: keyof ChainColumns; field: string; fmt: (n: number) => string }[] = [
+  { key: "oi",       field: "oi",        fmt: (n) => (n / 100000).toFixed(1) + "L" },
+  { key: "oiChange", field: "oi_change", fmt: (n) => (n >= 0 ? "+" : "") + (n / 100000).toFixed(2) + "L" },
+  { key: "volume",   field: "volume",    fmt: (n) => (n / 100000).toFixed(1) + "L" },
+  { key: "bid",      field: "bid",       fmt: (n) => n.toFixed(2) },
+  { key: "ask",      field: "ask",       fmt: (n) => n.toFixed(2) },
+  { key: "iv",       field: "iv",        fmt: (n) => n.toFixed(1) + "%" },
+  { key: "delta",    field: "delta",     fmt: (n) => n.toFixed(2) },
+  { key: "gamma",    field: "gamma",     fmt: (n) => n.toFixed(4) },
+  { key: "theta",    field: "theta",     fmt: (n) => n.toFixed(1) },
+  { key: "vega",     field: "vega",      fmt: (n) => n.toFixed(1) },
 ];
 
 function StatBox({ label, value, color, theme }: { label: string; value: string; color: string; theme: Theme }) {
@@ -292,8 +301,8 @@ export default function Backtest() {
   } : null;
   const histChangePct = histStats ? ((histStats.last - histStats.first) / histStats.first) * 100 : 0;
 
-  // Column config for the option-chain table — OI only makes sense for real data (reconstructed has none)
-  const activeOptional = OPTIONAL_COLS.filter(c => columns[c.key] && (c.key !== "oi" || chainIsReal));
+  // Column config for the option-chain table — OI/OIChange/Volume/Bid/Ask only exist on real data
+  const activeOptional = OPTIONAL_COLS.filter(c => columns[c.key] && (!REAL_ONLY_KEYS.has(c.key) || chainIsReal));
   const gridTemplate = `${"0.8fr ".repeat(activeOptional.length)}1fr 76px 1fr ${"0.8fr ".repeat(activeOptional.length)}`.trim();
 
   return (
@@ -450,9 +459,10 @@ export default function Backtest() {
                   <div className="text-sm" style={{ color: theme.text.faint }}>
                     Fyers doesn't provide real historical option-chain quotes for expired contracts. For dates
                     TradePro was running (auto-saved every ~5 min, for every expiry — weekly, next-weekly, monthly),
-                    you'll see real saved data with an expiry picker below. For older dates, only a Black-Scholes
-                    reconstruction is possible. Tap <b style={{ color: theme.accent.green }}>B</b>/<b style={{ color: theme.accent.red }}>S</b> on
-                    any strike to send it to the Simulator as a leg.
+                    you'll see real saved data — LTP, Bid, Ask, Volume, OI, OI Change, IV and Greeks — with an
+                    expiry picker below. For older dates, only a Black-Scholes reconstruction is possible (LTP/IV/Greeks
+                    only — no real bid/ask/volume/OI). Tap <b style={{ color: theme.accent.green }}>B</b>/<b style={{ color: theme.accent.red }}>S</b> on
+                    any strike to send it to the Simulator as a leg. Use the columns icon above to show/hide fields.
                   </div>
 
                   <div>
@@ -561,18 +571,18 @@ export default function Backtest() {
 
                       {chainIsReal && (chainData.data.expiryData as ArchivedChainRow[]).some(r => r.ce_iv != null) && (
                         <div className="text-sm px-1" style={{ color: theme.text.faint }}>
-                          Real LTP/OI is exact for this specific expiry contract. IV/Greeks are backed out assuming {chainData.days_to_expiry_used ?? 7}d to expiry.
+                          Real LTP/Bid/Ask/OI/Volume are exact for this specific expiry contract. IV/Greeks are backed out assuming {chainData.days_to_expiry_used ?? 7}d to expiry.
                         </div>
                       )}
 
                       {activeOptional.length > 0 && (
                         <div className="grid text-center px-1 font-semibold sticky top-0"
                           style={{ gridTemplateColumns: gridTemplate, fontSize: 10, color: theme.text.faint, background: theme.bg.surfaceAlt }}>
-                          {activeOptional.map(c => <div key={c.key} style={{ color: theme.accent.green }}>CE {c.key.toUpperCase()}</div>)}
+                          {activeOptional.map(c => <div key={c.key} style={{ color: theme.accent.green }}>CE {CHAIN_COLUMN_LABELS[c.key]}</div>)}
                           <div style={{ color: theme.accent.green }}>CE LTP</div>
                           <div style={{ color: theme.accent.cyan  }}>STRIKE</div>
                           <div style={{ color: theme.accent.red   }}>PE LTP</div>
-                          {activeOptional.map(c => <div key={c.key} style={{ color: theme.accent.red }}>PE {c.key.toUpperCase()}</div>)}
+                          {activeOptional.map(c => <div key={c.key} style={{ color: theme.accent.red }}>PE {CHAIN_COLUMN_LABELS[c.key]}</div>)}
                         </div>
                       )}
 
@@ -588,7 +598,7 @@ export default function Backtest() {
                               fontSize   : 12,
                             }}>
                             {activeOptional.map(c => {
-                              const v = (row as any)[`ce_${c.key}`];
+                              const v = (row as any)[`ce_${c.field}`];
                               return <div key={c.key} style={{ color: theme.text.faint }}>{v != null ? c.fmt(v) : "-"}</div>;
                             })}
                             <div>
@@ -618,7 +628,7 @@ export default function Backtest() {
                               )}
                             </div>
                             {activeOptional.map(c => {
-                              const v = (row as any)[`pe_${c.key}`];
+                              const v = (row as any)[`pe_${c.field}`];
                               return <div key={c.key} style={{ color: theme.text.faint }}>{v != null ? c.fmt(v) : "-"}</div>;
                             })}
                           </div>
