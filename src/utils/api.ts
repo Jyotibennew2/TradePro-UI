@@ -97,25 +97,35 @@ export const fetchHistoricalChain = (params: {
 };
 
 // ─── Real Archived Option Chain (saved automatically every ~5 min, per expiry) ─
+// Full backtesting field set: timestamp, underlying price, expiry, strike,
+// LTP, bid, ask, volume, OI, change in OI, IV, Delta, Gamma, Theta, Vega.
 // IV + Greeks are backed out from the real saved LTP at capture time
 // (assumed days-to-expiry — see days_to_expiry_used on the response).
 export interface ArchivedChainRow {
-  strike  : number;
-  ce_ltp  : number;
-  pe_ltp  : number;
-  ce_oi?  : number;
-  pe_oi?  : number;
-  ce_iv?  : number;
-  pe_iv?  : number;
-  ce_delta?: number;
-  pe_delta?: number;
-  ce_gamma?: number;
-  pe_gamma?: number;
-  ce_theta?: number;
-  pe_theta?: number;
-  ce_vega? : number;
-  pe_vega? : number;
-  atm     : boolean;
+  strike       : number;
+  ce_ltp       : number;
+  pe_ltp       : number;
+  ce_bid?      : number;
+  pe_bid?      : number;
+  ce_ask?      : number;
+  pe_ask?      : number;
+  ce_oi?       : number;
+  pe_oi?       : number;
+  ce_oi_change?: number;
+  pe_oi_change?: number;
+  ce_volume?   : number;
+  pe_volume?   : number;
+  ce_iv?       : number;
+  pe_iv?       : number;
+  ce_delta?    : number;
+  pe_delta?    : number;
+  ce_gamma?    : number;
+  pe_gamma?    : number;
+  ce_theta?    : number;
+  pe_theta?    : number;
+  ce_vega?     : number;
+  pe_vega?     : number;
+  atm          : boolean;
 }
 
 export interface ArchivedChainResponse {
@@ -161,6 +171,12 @@ export const fetchArchivedDates = (symbol: string, expiry?: string) =>
 export const fetchArchivedExpiries = (symbol: string, date?: string) =>
   get<{ success: boolean; symbol: string; date: string | null; expiries: string[] }>(
     `/optionchain/archive/expiries?symbol=${symbol}${date ? `&date=${date}` : ""}`
+  );
+
+/** Archive DB diagnostics: total rows + file size in MB. */
+export const fetchArchiveStats = () =>
+  get<{ success: boolean; data: { rows: number; size_bytes: number; size_mb: number; path: string } }>(
+    "/optionchain/archive/stats"
   );
 
 // ─── Greeks ──────────────────────────────────────────────────────────────────
