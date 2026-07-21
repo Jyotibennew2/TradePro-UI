@@ -148,11 +148,15 @@ export interface ArchivedChainResponse {
 /**
  * Fetch a real, previously-saved option-chain snapshot for a given capture
  * date (YYYY-MM-DD). Pass `expiry` (YYYY-MM-DD, the contract's own expiry —
- * see fetchArchivedExpiries) to pick a specific weekly/monthly contract;
- * omit it to get whichever expiry was archived nearest to that date.
+ * see fetchArchivedExpiries) to pick a specific weekly/monthly contract.
+ * Pass `time` (unix epoch seconds) to pick the snapshot closest to that
+ * exact moment — used for replay/walk-forward stepping through the day;
+ * omit both for the last snapshot of the day (closing chain).
  */
-export const fetchArchivedChain = (symbol: string, date: string, expiry?: string) =>
-  get<ArchivedChainResponse>(`/optionchain/archive?symbol=${symbol}&date=${date}${expiry ? `&expiry=${expiry}` : ""}`);
+export const fetchArchivedChain = (symbol: string, date: string, expiry?: string, time?: number) =>
+  get<ArchivedChainResponse>(
+    `/optionchain/archive?symbol=${symbol}&date=${date}${expiry ? `&expiry=${expiry}` : ""}${time ? `&time=${time}` : ""}`
+  );
 
 /**
  * List which capture dates have at least one real saved snapshot.
@@ -171,6 +175,16 @@ export const fetchArchivedDates = (symbol: string, expiry?: string) =>
 export const fetchArchivedExpiries = (symbol: string, date?: string) =>
   get<{ success: boolean; symbol: string; date: string | null; expiries: string[] }>(
     `/optionchain/archive/expiries?symbol=${symbol}${date ? `&date=${date}` : ""}`
+  );
+
+/**
+ * List every captured_at timestamp (unix epoch seconds) available for a
+ * given symbol+expiry+capture date — used to step forward/backward through
+ * the day's snapshots at whatever granularity the user picks.
+ */
+export const fetchArchivedTimes = (symbol: string, date: string, expiry: string) =>
+  get<{ success: boolean; symbol: string; date: string; expiry: string; times: number[] }>(
+    `/optionchain/archive/times?symbol=${symbol}&date=${date}&expiry=${expiry}`
   );
 
 /** Archive DB diagnostics: total rows + file size in MB. */
