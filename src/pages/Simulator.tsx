@@ -1,9 +1,12 @@
 /**
  * TradePro - Options Simulator Page
- * Full strategy builder with payoff, Greeks, margin, scenario matrix.
+ * Single scrollable page — every section (Builder, Historical Chain, Payoff,
+ * Greeks, Scenario, Margin, Adjust, Saved) is a collapsible block toggled by
+ * the button row at top, instead of separate tabs. Multiple sections can be
+ * open at once.
  */
 
-import { useState, useCallback, useEffect }  from "react";
+import { useState, useCallback, useEffect, useRef }  from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAppStore }            from "../store";
 import { useTheme } from "../store/themeStore";
@@ -27,15 +30,16 @@ import PayoffChart        from "../simulator/components/PayoffChart";
 import GreeksDisplay      from "../simulator/components/GreeksDisplay";
 import ScenarioMatrixDisplay from "../simulator/components/ScenarioMatrix";
 import MarginDisplay      from "../simulator/components/MarginDisplay";
+import HistoricalOptionChain from "../components/historical/HistoricalOptionChain";
 import Card               from "../components/ui/Card";
-import Loader             from "../components/ui/Loader";
 
 import {
   Plus, Save, Download, Upload, RefreshCw,
   BarChart2, Grid, Activity, Shield, AlertTriangle, ArrowUpDown, X,
+  History, ChevronDown, ChevronUp,
 } from "lucide-react";
 
-type TabType = "builder" | "payoff" | "greeks" | "scenario" | "margin" | "adjust" | "saved";
+type SectionId = "builder" | "historical" | "payoff" | "greeks" | "scenario" | "margin" | "adjust" | "saved";
 
 export default function Simulator() {
   const theme = useTheme();
@@ -48,13 +52,27 @@ export default function Simulator() {
     payoff, setPayoff, setIsCalculating,
   } = store;
 
-  const [tab,          setTab]          = useState<TabType>("builder");
+  const [openSections, setOpenSections] = useState<Set<SectionId>>(new Set(["builder"]));
   const [template,     setTemplate]     = useState("CUSTOM");
   const [showPerLeg,   setShowPerLeg]   = useState(false);
   const [dragFrom,     setDragFrom]     = useState<number | null>(null);
   const [savedList,    setSavedList]    = useState<BuiltStrategy[]>(() => strategyStorage.getAll());
   const [saveMsg,      setSaveMsg]      = useState("");
   const [stratName,    setStratName]    = useState("My Strategy");
+
+  const sectionRefs = useRef<Record<SectionId, HTMLDivElement | null>>({} as any);
+
+  const toggleSection = (id: SectionId) => {
+    setOpenSections(prev => {
+      const next = new Set(prev);
+      const wasOpen = next.has(id);
+      if (wasOpen) next.delete(id); else next.add(id);
+      if (!wasOpen) {
+        setTimeout(() => sectionRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+      }
+      return next;
+    });
+  };
 
   const effectiveSpot = spot || (underlying === "NIFTY" ? nifty : bankNifty) || 24300;
   const T             = daysToYears(daysToExpiry);
@@ -75,7 +93,6 @@ export default function Simulator() {
         useBS       : true,
       });
       setPayoff(result);
-      setTab("payoff");
     } finally {
       setIsCalculating(false);
     }
@@ -123,7 +140,7 @@ export default function Simulator() {
     ? buildScenarioMatrix(legs, effectiveSpot, iv, daysToExpiry, r)
     : null;
 
-  // ─── Template select ──────────────────────────────────────────────────────
+  // ─── Adjustments ──────────────────────────────────────────────────────────
   type ThreatLevel = "safe" | "watch" | "danger";
   const BUFFER_WATCH  = 0.03;
   const BUFFER_DANGER = 0.01;
@@ -271,7 +288,7 @@ export default function Simulator() {
     clearLegs();
     s.legs.forEach(l => addLeg(l));
     setStratName(s.name);
-    setTab("builder");
+    setOpenSections(prev => new Set(prev).add("builder"));
   };
 
   // ─── Duplicate leg ────────────────────────────────────────────────────────
@@ -279,44 +296,49 @@ export default function Simulator() {
     addLeg({ ...leg });
   };
 
-  const TABS: { id: TabType; label: string; icon: any }[] = [
-    { id: "builder",  label: "Builder",  icon: Plus      },
-    { id: "payoff",   label: "Payoff",   icon: BarChart2 },
-    { id: "greeks",   label: "Greeks",   icon: Activity  },
-    { id: "scenario", label: "Scenario", icon: Grid      },
-    { id: "margin",   label: "Margin",   icon: Shield    },
-    { id: "adjust",   label: "Adjust",   icon: AlertTriangle },
-    { id: "saved",    label: "Saved",    icon: Save      },
+  const SECTIONS: { id: SectionId; label: string; icon: any }[] = [
+    { id: "builder",     label: "Builder",     icon: Plus          },
+    { id: "historical",  label: "Hist. Chain", icon: History       },
+    { id: "payoff",      label: "Payoff",      icon: BarChart2     },
+    { id: "greeks",      label: "Greeks",      icon: Activity      },
+    { id: "scenario",    label: "Scenario",    icon: Grid          },
+    { id: "margin",      label: "Margin",      icon: Shield        },
+    { id: "adjust",      label: "Adjust",      icon: AlertTriangle },
+    { id: "saved",       label: "Saved",       icon: Save          },
   ];
 
   return (
     <div className="flex flex-col h-full">
-      {/* Tab bar */}
-      <div className="flex border-b overflow-x-auto"
+      {/* Section toggle buttons — click to open/close, multiple can be open */}
+      <div className="flex border-b overflow-x-auto sticky top-0 z-10"
         style={{ borderColor: theme.border.subtle, background: theme.bg.surface }}>
-        {TABS.map(({ id, label, icon: Icon }) => (
-          <button key={id} onClick={() => setTab(id)}
-            className="flex items-center gap-1 px-3 py-2 text-sm font-bold shrink-0 transition-all relative"
-            style={{
-              color      : tab === id ? theme.accent.cyan : theme.text.muted,
-              borderBottom: tab === id ? `2px solid ${theme.accent.cyan}` : "2px solid transparent",
-            }}>
-            <Icon size={14} />{label}
-            {id === "adjust" && worstLevel !== "safe" && (
-              <span style={{
-                width: 6, height: 6, borderRadius: 99, marginLeft: 2,
-                background: worstLevel === "danger" ? theme.accent.red : theme.accent.orange,
-              }} />
-            )}
-          </button>
-        ))}
+        {SECTIONS.map(({ id, label, icon: Icon }) => {
+          const isOpen = openSections.has(id);
+          return (
+            <button key={id} onClick={() => toggleSection(id)}
+              className="flex items-center gap-1 px-3 py-2 text-sm font-bold shrink-0 transition-all relative"
+              style={{
+                color      : isOpen ? theme.accent.cyan : theme.text.muted,
+                borderBottom: isOpen ? `2px solid ${theme.accent.cyan}` : "2px solid transparent",
+              }}>
+              <Icon size={14} />{label}
+              {isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              {id === "adjust" && worstLevel !== "safe" && (
+                <span style={{
+                  position: "absolute", top: 4, right: 2, width: 6, height: 6, borderRadius: 99,
+                  background: worstLevel === "danger" ? theme.accent.red : theme.accent.orange,
+                }} />
+              )}
+            </button>
+          );
+        })}
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
 
-        {/* ── BUILDER TAB ── */}
-        {tab === "builder" && (
-          <>
+        {/* ── BUILDER ── */}
+        {openSections.has("builder") && (
+          <div ref={el => { sectionRefs.current.builder = el; }} className="space-y-3">
             {/* Market params */}
             <Card title="Market Parameters">
               <div className="grid grid-cols-2 gap-2">
@@ -446,12 +468,19 @@ export default function Simulator() {
                 <div className="text-sm">Select a template or add legs manually</div>
               </div>
             )}
-          </>
+          </div>
         )}
 
-        {/* ── PAYOFF TAB ── */}
-        {tab === "payoff" && (
-          <>
+        {/* ── HISTORICAL OPTION CHAIN ── */}
+        {openSections.has("historical") && (
+          <div ref={el => { sectionRefs.current.historical = el; }}>
+            <HistoricalOptionChain />
+          </div>
+        )}
+
+        {/* ── PAYOFF ── */}
+        {openSections.has("payoff") && (
+          <div ref={el => { sectionRefs.current.payoff = el; }} className="space-y-3">
             {!payoff && legs.length > 0 && (
               <button onClick={calculate}
                 className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
@@ -476,12 +505,12 @@ export default function Simulator() {
                 <div className="text-sm">Add legs and calculate payoff</div>
               </div>
             )}
-          </>
+          </div>
         )}
 
-        {/* ── GREEKS TAB ── */}
-        {tab === "greeks" && (
-          <>
+        {/* ── GREEKS ── */}
+        {openSections.has("greeks") && (
+          <div ref={el => { sectionRefs.current.greeks = el; }}>
             {legs.length > 0
               ? <Card title="Portfolio Greeks"><GreeksDisplay greeks={portfolioGreeks} /></Card>
               : <div className="text-center py-10" style={{ color: theme.text.muted }}>
@@ -489,12 +518,12 @@ export default function Simulator() {
                   <div className="text-sm">Add legs to see Greeks</div>
                 </div>
             }
-          </>
+          </div>
         )}
 
-        {/* ── SCENARIO TAB ── */}
-        {tab === "scenario" && (
-          <>
+        {/* ── SCENARIO ── */}
+        {openSections.has("scenario") && (
+          <div ref={el => { sectionRefs.current.scenario = el; }}>
             {scenarioMatrix
               ? <Card title="Scenario Matrix (Spot × IV)">
                   <ScenarioMatrixDisplay matrix={scenarioMatrix} />
@@ -504,12 +533,12 @@ export default function Simulator() {
                   <div className="text-sm">Add legs to see scenario matrix</div>
                 </div>
             }
-          </>
+          </div>
         )}
 
-        {/* ── MARGIN TAB ── */}
-        {tab === "margin" && (
-          <>
+        {/* ── MARGIN ── */}
+        {openSections.has("margin") && (
+          <div ref={el => { sectionRefs.current.margin = el; }}>
             {margin
               ? <Card title="Margin Analysis">
                   <MarginDisplay margin={margin} available={500000} />
@@ -519,12 +548,12 @@ export default function Simulator() {
                   <div className="text-sm">Add legs to see margin requirements</div>
                 </div>
             }
-          </>
+          </div>
         )}
 
-        {/* ── ADJUST TAB ── */}
-        {tab === "adjust" && (
-          <>
+        {/* ── ADJUST ── */}
+        {openSections.has("adjust") && (
+          <div ref={el => { sectionRefs.current.adjust = el; }} className="space-y-3">
             {legs.length === 0 ? (
               <div className="text-center py-10" style={{ color: theme.text.muted }}>
                 <div className="text-3xl mb-2">🛠️</div>
@@ -588,12 +617,12 @@ export default function Simulator() {
                 ))}
               </>
             )}
-          </>
+          </div>
         )}
 
-        {/* ── SAVED TAB ── */}
-        {tab === "saved" && (
-          <>
+        {/* ── SAVED ── */}
+        {openSections.has("saved") && (
+          <div ref={el => { sectionRefs.current.saved = el; }}>
             {savedList.length === 0
               ? <div className="text-center py-10" style={{ color: theme.text.muted }}>
                   <div className="text-3xl mb-2">💾</div>
@@ -635,7 +664,7 @@ export default function Simulator() {
                   ))}
                 </div>
             }
-          </>
+          </div>
         )}
       </div>
     </div>
