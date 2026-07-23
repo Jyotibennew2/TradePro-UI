@@ -3,15 +3,20 @@
  * Real archived data (per-expiry, every ~5 min) with replay/walk-forward
  * controls: timeframe granularity, forward/reverse stepping, auto-play with
  * speed control, jump-to-date, and a mini price chart with a position marker.
+ * Also includes a real Walk-Forward Backtest: runs the current Builder legs
+ * forward through actual archived LTPs from the currently-viewed snapshot,
+ * applying SL/target rules — not a Black-Scholes simulation.
  * Used by both the Simulator page and the Backtest page.
  */
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import {
   fetchArchivedChain, fetchArchivedDates, fetchArchivedExpiries, fetchArchivedTimes,
-  fetchHistorical, type ArchivedChainRow, type Timeframe,
+  fetchHistorical, runWalkForwardBacktest, type ArchivedChainRow, type Timeframe,
+  type WalkForwardResponse,
 } from "../../utils/api";
 import { useSimulatorStore, makeOptionLeg } from "../../simulator/state/simulatorStore";
+import { LOT_SIZES } from "../../simulator/models/Option";
 import Card from "../ui/Card";
 import Loader from "../ui/Loader";
 import ErrorBox from "../ui/ErrorBox";
@@ -19,9 +24,9 @@ import ChainColumnToggle from "../ui/ChainColumnToggle";
 import { useTheme } from "../../store/themeStore";
 import { useChainColumnsStore, CHAIN_COLUMN_LABELS, type ChainColumns } from "../../store/chainColumnsStore";
 import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ReferenceDot, ResponsiveContainer,
+  AreaChart, Area, XAxis, YAxis, Tooltip, ReferenceDot, ReferenceLine, ResponsiveContainer,
 } from "recharts";
-import { Play, Pause, ChevronLeft, ChevronRight, Calendar } from "lucide-react";
+import { Play, Pause, ChevronLeft, ChevronRight, Calendar, TrendingUp } from "lucide-react";
 
 const SYMBOLS = ["NIFTY", "BANKNIFTY"];
 
@@ -39,7 +44,6 @@ const TIMEFRAMES: { key: Timeframe; label: string; snapshotStep: number | "day" 
 const SPEEDS = [0.5, 1, 2, 5] as const;
 const BASE_INTERVAL_MS = 3000; // at 1x, one step every 3s
 
-const REAL_ONLY_KEYS = new Set<keyof ChainColumns>(["oi", "oiChange", "volume", "bid", "ask"]);
 const OPTIONAL_COLS: { key: keyof ChainColumns; field: string; fmt: (n: number) => string }[] = [
   { key: "oi",       field: "oi",        fmt: (n) => (n / 100000).toFixed(1) + "L" },
   { key: "oiChange", field: "oi_change", fmt: (n) => (n >= 0 ? "+" : "") + (n / 100000).toFixed(2) + "L" },
@@ -66,7 +70,7 @@ function fmtDateLabel(d: string) {
 export default function HistoricalOptionChain() {
   const theme = useTheme();
   const { columns } = useChainColumnsStore();
-  const { addLeg } = useSimulatorStore();
+  const { addLeg, legs } = useSimulatorStore();
 
   const [symbol, setSymbol] = useState("NIFTY");
   const [resolution, setResolution] = useState<Timeframe>("15m");
@@ -90,6 +94,13 @@ export default function HistoricalOptionChain() {
   const playRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [miniChart, setMiniChart] = useState<{ date: string; close: number; t: number }[]>([]);
+
+  // Walk-forward backtest (real archived LTPs, not simulated)
+  const [wfSlPct, setWfSlPct]   = useState(50);
+  const [wfTgtPct, setWfTgtPct] = useState(50);
+  const [wfResult, setWfResult] = useState<WalkForwardResponse | null>(null);
+  const [wfLoading, setWfLoading] = useState(false);
+  const [wfError, setWfError]     = useState("");
 
   // Load all archived expiries for the symbol
   useEffect(() => {
@@ -147,9 +158,10 @@ export default function HistoricalOptionChain() {
     }
   };
 
-  // Load chain whenever the current timestamp changes
+  // Load chain whenever the current timestamp changes; clear any stale backtest result
   useEffect(() => {
     if (times[timeIdx] != null) loadChainAt(times[timeIdx]);
+    setWfResult(null); setWfError("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [times, timeIdx]);
 
@@ -163,7 +175,6 @@ export default function HistoricalOptionChain() {
     setTimeIdx(i => {
       const next = i + dir * n;
       if (next < 0) {
-        // move to previous day, land near its end
         setDateIdx(d => Math.max(d - 1, 0));
         return 0;
       }
@@ -193,6 +204,31 @@ export default function HistoricalOptionChain() {
     setTimeout(() => setLegMsg(""), 2000);
   };
 
+  // ─── Walk-forward backtest: replay Builder legs from the current snapshot ─
+  const runWalkForward = async () => {
+    if (!chainMeta || !expiry || legs.length === 0) return;
+    setWfLoading(true); setWfError(""); setWfResult(null);
+    try {
+      const res = await runWalkForwardBacktest({
+        symbol, expiry,
+        entryTime: chainMeta.savedAt,
+        legs: legs.map(l => ({
+          strike: l.contract.strike, option_type: l.contract.optionType,
+          action: l.action, lots: l.lots,
+        })),
+        lotSize: LOT_SIZES[symbol as "NIFTY" | "BANKNIFTY"] ?? 50,
+        slPct: wfSlPct, tgtPct: wfTgtPct,
+      });
+      setWfResult(res);
+    } catch (e: any) {
+      setWfError(e?.message?.includes("400") || e?.message?.includes("404")
+        ? "Couldn't run — strikes may be outside the archived range at this point."
+        : "Walk-forward backtest failed");
+    } finally {
+      setWfLoading(false);
+    }
+  };
+
   const fmt = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 0 });
   const activeOptional = OPTIONAL_COLS.filter(c => columns[c.key]);
   const gridTemplate = `${"0.8fr ".repeat(activeOptional.length)}1fr 76px 1fr ${"0.8fr ".repeat(activeOptional.length)}`.trim();
@@ -203,6 +239,14 @@ export default function HistoricalOptionChain() {
       Math.abs(c.t - chainMeta.savedAt) < Math.abs(best.t - chainMeta.savedAt) ? c : best
     );
   }, [chainMeta, miniChart]);
+
+  const wfChartData = useMemo(() => {
+    if (!wfResult) return [];
+    return wfResult.equity_curve.map(p => ({
+      time: new Date(p.t * 1000).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
+      pnl : p.pnl,
+    }));
+  }, [wfResult]);
 
   const hasData = expiries.length > 0;
 
@@ -402,6 +446,82 @@ export default function HistoricalOptionChain() {
                   ))}
                 </div>
               </>
+            )}
+
+            {/* ── Real Walk-Forward Backtest ── */}
+            {legs.length > 0 && chainMeta && (
+              <div className="rounded-xl p-3 space-y-2" style={{ background: theme.bg.surface, border: `1px solid ${theme.accent.orange}40` }}>
+                <div className="flex items-center gap-2 text-sm font-bold" style={{ color: theme.accent.orange }}>
+                  <TrendingUp size={16} /> Walk-Forward Backtest (real data, not simulated)
+                </div>
+                <div className="text-sm" style={{ color: theme.text.faint }}>
+                  Replays your {legs.length}-leg Builder strategy forward from <b style={{ color: theme.accent.cyan }}>{fmtTime(chainMeta.savedAt)}</b>,
+                  using the actual archived LTPs for each strike, applying SL/Target.
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="text-sm mb-1" style={{ color: theme.text.muted }}>SL % (of entry premium)</div>
+                    <input type="number" min={1} max={500} value={wfSlPct}
+                      onChange={e => setWfSlPct(Number(e.target.value))}
+                      className="w-full px-2 py-1.5 rounded-lg text-sm outline-none text-center"
+                      style={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}`, color: theme.accent.red }} />
+                  </div>
+                  <div>
+                    <div className="text-sm mb-1" style={{ color: theme.text.muted }}>Target %</div>
+                    <input type="number" min={1} max={500} value={wfTgtPct}
+                      onChange={e => setWfTgtPct(Number(e.target.value))}
+                      className="w-full px-2 py-1.5 rounded-lg text-sm outline-none text-center"
+                      style={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}`, color: theme.accent.green }} />
+                  </div>
+                </div>
+                <button onClick={runWalkForward}
+                  disabled={wfLoading}
+                  className="w-full py-2 rounded-lg text-sm font-black"
+                  style={{ background: theme.accent.orange, color: theme.bg.page, opacity: wfLoading ? 0.7 : 1 }}>
+                  {wfLoading ? "Running..." : "▶ Run Walk-Forward Backtest"}
+                </button>
+
+                {wfError && <ErrorBox message={wfError} />}
+
+                {wfResult && (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-lg p-2 text-center" style={{ background: theme.bg.surfaceAlt }}>
+                        <div className="text-sm" style={{ color: theme.text.muted }}>Exit Reason</div>
+                        <div className="text-sm font-bold" style={{ color: wfResult.exit.reason === "SL Hit" ? theme.accent.red : wfResult.exit.reason === "Target Hit" ? theme.accent.green : theme.text.secondary }}>
+                          {wfResult.exit.reason}
+                        </div>
+                      </div>
+                      <div className="rounded-lg p-2 text-center" style={{ background: theme.bg.surfaceAlt }}>
+                        <div className="text-sm" style={{ color: theme.text.muted }}>Final P&L</div>
+                        <div className="text-sm font-bold" style={{ color: wfResult.final_pnl >= 0 ? theme.accent.green : theme.accent.red }}>
+                          {wfResult.final_pnl >= 0 ? "+" : ""}₹{fmt(wfResult.final_pnl)}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-sm text-center" style={{ color: theme.text.faint }}>
+                      Entry {fmtTime(wfResult.entry.t)} → Exit {fmtTime(wfResult.exit.t)} • {wfResult.snapshots_used} snapshots
+                    </div>
+                    {wfChartData.length > 1 && (
+                      <ResponsiveContainer width="100%" height={120}>
+                        <AreaChart data={wfChartData}>
+                          <defs>
+                            <linearGradient id="wfGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor={theme.accent.orange} stopOpacity={0.3} />
+                              <stop offset="95%" stopColor={theme.accent.orange} stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <XAxis dataKey="time" tick={{ fill: theme.text.faint, fontSize: 9 }} axisLine={false} tickLine={false} />
+                          <YAxis hide />
+                          <Tooltip contentStyle={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}`, borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [`₹${fmt(v)}`, "P&L"]} />
+                          <ReferenceLine y={0} stroke={theme.text.faint} strokeDasharray="3 3" />
+                          <Area type="monotone" dataKey="pnl" stroke={theme.accent.orange} strokeWidth={2} fill="url(#wfGrad)" dot={false} />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </>
         )}
