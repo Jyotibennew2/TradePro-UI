@@ -193,6 +193,49 @@ export const fetchArchiveStats = () =>
     "/optionchain/archive/stats"
   );
 
+// ─── Walk-Forward Backtest (real archived LTPs, not Black-Scholes) ───────────
+export interface WalkForwardLeg {
+  strike     : number;
+  option_type: "CE" | "PE";
+  action     : "BUY" | "SELL";
+  lots       : number;
+}
+
+export interface WalkForwardResponse {
+  success       : boolean;
+  symbol        : string;
+  expiry        : string;
+  was_mock      : boolean;
+  entry         : { t: number; spot: number; premium_abs: number };
+  exit          : { t: number; spot: number; reason: string };
+  sl_amount     : number;
+  tgt_amount    : number;
+  final_pnl     : number;
+  equity_curve  : { t: number; pnl: number; spot: number }[];
+  snapshots_used: number;
+  note          : string;
+}
+
+export const runWalkForwardBacktest = (params: {
+  symbol    : string;
+  expiry    : string;   // YYYY-MM-DD
+  entryTime : number;   // unix epoch seconds
+  legs      : WalkForwardLeg[];
+  lotSize   : number;
+  slPct     : number;
+  tgtPct    : number;
+  exitTime? : number;
+}) => post<WalkForwardResponse>("/backtest/walkforward", {
+  symbol      : params.symbol,
+  expiry      : params.expiry,
+  entry_time  : params.entryTime,
+  legs        : params.legs,
+  lot_size    : params.lotSize,
+  sl_pct      : params.slPct,
+  tgt_pct     : params.tgtPct,
+  exit_time   : params.exitTime,
+});
+
 // ─── Greeks ──────────────────────────────────────────────────────────────────
 export const fetchGreeks = (spot: number, strike: number, expiry: number, iv: number, type: string) =>
   get<GreeksResponse>(`/greeks?spot=${spot}&strike=${strike}&expiry=${expiry}&iv=${iv}&type=${type}`);
