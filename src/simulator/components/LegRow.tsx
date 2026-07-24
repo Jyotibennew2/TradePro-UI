@@ -1,11 +1,10 @@
 /**
  * TradePro Simulator - Leg Row Component
- * Single option leg display with edit, duplicate, delete.
+ * Single option leg display with edit, duplicate, roll, delete.
  */
-
 import type { OptionLeg } from "../models/Option";
 import { LOT_SIZES }      from "../models/Option";
-import { Copy, Trash2, GripVertical } from "lucide-react";
+import { Copy, Trash2, GripVertical, ArrowUpDown } from "lucide-react";
 import { useTheme } from "../../store/themeStore";
 
 interface LegRowProps {
@@ -17,11 +16,12 @@ interface LegRowProps {
   onDragStart: (index: number) => void;
   onDragOver : (index: number) => void;
   onDrop     : () => void;
+  onRoll?    : (leg: OptionLeg) => void;
 }
 
 export default function LegRow({
   leg, index, onUpdate, onDuplicate, onDelete,
-  onDragStart, onDragOver, onDrop,
+  onDragStart, onDragOver, onDrop, onRoll,
 }: LegRowProps) {
   const theme = useTheme();
   const { contract, action, lots, entryPrice, iv } = leg;
@@ -91,6 +91,12 @@ export default function LegRow({
 
         {/* Actions */}
         <div className="flex gap-2 ml-auto">
+          {onRoll && (
+            <button onClick={() => onRoll(leg)}
+              className="p-1.5 rounded" style={{ color: theme.accent.orange, background: theme.accent.orange + "15" }}>
+              <ArrowUpDown size={18} />
+            </button>
+          )}
           <button onClick={() => onDuplicate(leg)}
             className="p-1.5 rounded" style={{ color: theme.text.muted, background: theme.border.subtle }}>
             <Copy size={18} />
