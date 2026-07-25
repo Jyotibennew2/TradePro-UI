@@ -1,9 +1,11 @@
 /**
  * TradePro Simulator - Option Chain panel (left workspace column, Section A)
- * Market selector + expiry dropdown + jump-to-date + the archived option
- * chain grid. Same chain rendering/columns/B-S-add-to-builder behavior as
- * before — just laid out compactly for the left column instead of inside a
- * collapsible "Historical" section.
+ * StockMock-style visual polish pass:
+ *   - multi-expiry tab row (with DTE) instead of a dropdown
+ *   - ATM IV / Straddle Premium / PCR summary strip (derived client-side
+ *     from the already-fetched chain data — no new backend calculation)
+ *   - OI bars behind the OI column, scaled to the max OI on screen
+ * Underlying data/handlers (useHistoricalChain) are unchanged.
  */
 import { useTheme } from "../../store/themeStore";
 import { useChainColumnsStore, CHAIN_COLUMN_LABELS } from "../../store/chainColumnsStore";
@@ -13,11 +15,28 @@ import ErrorBox from "../../components/ui/ErrorBox";
 import { SYMBOLS, OPTIONAL_COLS, fmt, fmtDateLabel } from "../hooks/useHistoricalChain";
 import type { HistoricalChain } from "../hooks/useHistoricalChain";
 
+function dteFor(expiry: string, fromDate: string): number | null {
+  if (!fromDate) return null;
+  const ms = new Date(expiry + "T00:00:00").getTime() - new Date(fromDate + "T00:00:00").getTime();
+  return Math.round(ms / 86400000);
+}
+
 export default function OptionChainPanel({ chain }: { chain: HistoricalChain }) {
   const theme = useTheme();
   const { columns } = useChainColumnsStore();
   const activeOptional = OPTIONAL_COLS.filter(c => (columns as Record<string, boolean>)[c.key]);
   const gridTemplate = `${"0.8fr ".repeat(activeOptional.length)}1fr 60px 1fr ${"0.8fr ".repeat(activeOptional.length)}`.trim();
+
+  const atmRow = chain.chainData?.find(r => r.atm) ?? null;
+  const atmIv = atmRow ? (((atmRow.ce_iv ?? 0) + (atmRow.pe_iv ?? 0)) / 2) : null;
+  const straddlePrem = atmRow ? (atmRow.ce_ltp ?? 0) + (atmRow.pe_ltp ?? 0) : null;
+  const totalCeOi = chain.chainData?.reduce((s, r) => s + (r.ce_oi ?? 0), 0) ?? 0;
+  const totalPeOi = chain.chainData?.reduce((s, r) => s + (r.pe_oi ?? 0), 0) ?? 0;
+  const pcr = chain.chainData && totalCeOi > 0 ? totalPeOi / totalCeOi : null;
+  const maxOi = chain.chainData
+    ? Math.max(1, ...chain.chainData.flatMap(r => [r.ce_oi ?? 0, r.pe_oi ?? 0]))
+    : 1;
+  const showOiBars = activeOptional.some(c => c.key === "oi");
 
   return (
     <div className="rounded-xl overflow-hidden" style={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}` }}>
@@ -39,28 +58,56 @@ export default function OptionChainPanel({ chain }: { chain: HistoricalChain }) 
             </button>
           ))}
         </div>
-        <div className="text-sm" style={{ color: theme.text.faint, fontSize: 10 }}>
+        <div style={{ color: theme.text.faint, fontSize: 10 }}>
           Archive currently covers NIFTY &amp; BANKNIFTY only.
         </div>
 
-        <select
-          value={chain.expiry}
-          onChange={e => chain.setExpiry(e.target.value)}
-          className="w-full px-2 py-1.5 rounded-lg text-sm outline-none"
-          style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.text.secondary }}
-        >
-          {chain.expiries.map(e => <option key={e} value={e}>{fmtDateLabel(e)}</option>)}
-        </select>
+        {/* Multi-expiry tab row with DTE */}
+        {chain.expiries.length > 0 && (
+          <div className="flex gap-1 overflow-x-auto pb-1">
+            {chain.expiries.map(e => {
+              const dte = dteFor(e, chain.selectedDate);
+              const active = chain.expiry === e;
+              return (
+                <button
+                  key={e}
+                  onClick={() => chain.setExpiry(e)}
+                  className="shrink-0 px-2 py-1 rounded-lg text-center"
+                  style={{ background: active ? theme.accent.cyan : theme.bg.surface, border: `1px solid ${active ? theme.accent.cyan : theme.border.subtle}` }}
+                >
+                  <div style={{ fontSize: 11, fontWeight: 800, color: active ? theme.bg.page : theme.text.secondary }}>{fmtDateLabel(e)}</div>
+                  {dte != null && <div style={{ fontSize: 8, color: active ? theme.bg.page : theme.text.faint }}>{dte} DTE</div>}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
+        {/* Jump to date */}
         {chain.dates.length > 0 && (
-          <select
-            value={chain.dateIdx}
-            onChange={e => chain.setDateIdx(Number(e.target.value))}
+          <select value={chain.dateIdx} onChange={e => chain.setDateIdx(Number(e.target.value))}
             className="w-full px-2 py-1.5 rounded-lg text-sm outline-none"
-            style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.text.secondary }}
-          >
+            style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.text.secondary }}>
             {chain.dates.map((d, i) => <option key={d} value={i}>{fmtDateLabel(d)}</option>)}
           </select>
+        )}
+
+        {/* ATM IV / Straddle Premium / PCR strip */}
+        {chain.chainData && (
+          <div className="grid grid-cols-3 gap-1.5">
+            <div className="rounded-lg text-center py-1" style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}` }}>
+              <div style={{ fontSize: 8, color: theme.text.faint }}>ATM IV</div>
+              <div className="font-bold" style={{ fontSize: 12, color: theme.accent.purple }}>{atmIv != null ? `${atmIv.toFixed(1)}%` : "—"}</div>
+            </div>
+            <div className="rounded-lg text-center py-1" style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}` }}>
+              <div style={{ fontSize: 8, color: theme.text.faint }}>Straddle Prem</div>
+              <div className="font-bold" style={{ fontSize: 12, color: theme.accent.cyan }}>{straddlePrem != null ? `₹${fmt(straddlePrem)}` : "—"}</div>
+            </div>
+            <div className="rounded-lg text-center py-1" style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}` }}>
+              <div style={{ fontSize: 8, color: theme.text.faint }}>PCR (OI)</div>
+              <div className="font-bold" style={{ fontSize: 12, color: theme.accent.orange }}>{pcr != null ? pcr.toFixed(2) : "—"}</div>
+            </div>
+          </div>
         )}
 
         {chain.loading && <Loader text="Loading snapshot..." />}
@@ -89,7 +136,7 @@ export default function OptionChainPanel({ chain }: { chain: HistoricalChain }) 
               {chain.chainData.map((row, i) => (
                 <div
                   key={i}
-                  className="grid text-center rounded-md"
+                  className="grid text-center rounded-md items-center"
                   style={{
                     gridTemplateColumns: gridTemplate,
                     background: row.atm ? theme.accent.cyan + "12" : (i % 2 === 0 ? theme.bg.surface : theme.bg.surfaceAlt),
@@ -99,6 +146,17 @@ export default function OptionChainPanel({ chain }: { chain: HistoricalChain }) 
                 >
                   {activeOptional.map(c => {
                     const v = (row as unknown as Record<string, number | undefined>)[`ce_${c.field}`];
+                    if (c.key === "oi" && showOiBars) {
+                      const pct = v != null ? Math.min(100, (v / maxOi) * 100) : 0;
+                      return (
+                        <div key={c.key} className="relative" style={{ height: 16 }}>
+                          <div style={{ position: "absolute", right: 0, top: 2, height: 12, width: `${pct}%`, background: theme.accent.green + "35", borderRadius: 3 }} />
+                          <div style={{ position: "relative", fontSize: 8, color: theme.text.faint, textAlign: "right", paddingRight: 2, lineHeight: "16px" }}>
+                            {v != null ? c.fmt(v) : "-"}
+                          </div>
+                        </div>
+                      );
+                    }
                     return <div key={c.key} style={{ color: theme.text.faint }}>{v != null ? c.fmt(v) : "-"}</div>;
                   })}
                   <div>
@@ -122,6 +180,17 @@ export default function OptionChainPanel({ chain }: { chain: HistoricalChain }) 
                   </div>
                   {activeOptional.map(c => {
                     const v = (row as unknown as Record<string, number | undefined>)[`pe_${c.field}`];
+                    if (c.key === "oi" && showOiBars) {
+                      const pct = v != null ? Math.min(100, (v / maxOi) * 100) : 0;
+                      return (
+                        <div key={c.key} className="relative" style={{ height: 16 }}>
+                          <div style={{ position: "absolute", left: 0, top: 2, height: 12, width: `${pct}%`, background: theme.accent.red + "35", borderRadius: 3 }} />
+                          <div style={{ position: "relative", fontSize: 8, color: theme.text.faint, textAlign: "left", paddingLeft: 2, lineHeight: "16px" }}>
+                            {v != null ? c.fmt(v) : "-"}
+                          </div>
+                        </div>
+                      );
+                    }
                     return <div key={c.key} style={{ color: theme.text.faint }}>{v != null ? c.fmt(v) : "-"}</div>;
                   })}
                 </div>
