@@ -12,7 +12,7 @@
  * the exact same logic that was already here — none of it was changed.
  * The historical-chain + walk-forward logic is the same logic too, now
  * shared via useHistoricalChain() instead of living inside one collapsible
- * section.
+ * section. POP% now comes from the new ProbabilityEngine.
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
@@ -33,6 +33,7 @@ import type { BuiltStrategy } from "../simulator/models/Strategy";
 import type { OptionLeg } from "../simulator/models/Option";
 import { STRIKE_STEPS } from "../simulator/models/Option";
 import { placePaperOrder } from "../utils/api";
+import { probabilityOfProfit } from "../simulator/pricing/ProbabilityEngine";
 
 import StrategyTemplates from "../simulator/components/StrategyTemplates";
 import LegRow from "../simulator/components/LegRow";
@@ -134,6 +135,9 @@ export default function Simulator() {
 
   // ─── Scenario matrix ────────────────────────────────────────────────────────────────
   const scenarioMatrix = legs.length ? buildScenarioMatrix(legs, effectiveSpot, iv, daysToExpiry, r) : null;
+
+  // ─── Probability of Profit ──────────────────────────────────────────────────────────
+  const pop = legs.length ? probabilityOfProfit(legs, effectiveSpot, iv, daysToExpiry, r) : null;
 
   // ─── Adjustments ─────────────────────────────────────────────────────────────────────────────
   type ThreatLevel = "safe" | "watch" | "danger";
@@ -549,7 +553,7 @@ export default function Simulator() {
 
             {/* Compact analytics cards */}
             <Card title="Analytics">
-              <AnalyticsCards payoff={payoff} margin={margin} greeks={portfolioGreeks} hasLegs={legs.length > 0} />
+              <AnalyticsCards payoff={payoff} margin={margin} greeks={portfolioGreeks} pop={pop} hasLegs={legs.length > 0} />
             </Card>
 
             {/* Tabbed bottom section */}
