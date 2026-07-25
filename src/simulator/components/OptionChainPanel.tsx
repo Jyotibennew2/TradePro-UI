@@ -2,8 +2,7 @@
  * TradePro Simulator - Option Chain panel (left workspace column, Section A)
  * StockMock-style visual polish pass:
  *   - multi-expiry tab row (with DTE) instead of a dropdown
- *   - ATM IV / Straddle Premium / PCR summary strip (derived client-side
- *     from the already-fetched chain data — no new backend calculation)
+ *   - ATM IV / Straddle Premium / PCR / Max Pain summary strip
  *   - OI bars behind the OI column, scaled to the max OI on screen
  * Underlying data/handlers (useHistoricalChain) are unchanged.
  */
@@ -21,6 +20,30 @@ function dteFor(expiry: string, fromDate: string): number | null {
   return Math.round(ms / 86400000);
 }
 
+/**
+ * Max Pain: the strike at which option WRITERS collectively pay out the
+ * least at expiry. For each candidate settlement strike S, sum what
+ * writers would owe: ITM calls (strike < S) pay (S - strike) * ce_oi,
+ * ITM puts (strike > S) pay (strike - S) * pe_oi. The strike minimizing
+ * that total is Max Pain. Standard formula, computed from the OI already
+ * in the fetched chain — no new data source.
+ */
+function computeMaxPain(rows: { strike: number; ce_oi?: number | null; pe_oi?: number | null }[]): number | null {
+  if (!rows || rows.length === 0) return null;
+  let best: number | null = null;
+  let bestPain = Infinity;
+  for (const candidate of rows) {
+    const S = candidate.strike;
+    let pain = 0;
+    for (const r of rows) {
+      if (r.strike < S) pain += (S - r.strike) * (r.ce_oi ?? 0);
+      if (r.strike > S) pain += (r.strike - S) * (r.pe_oi ?? 0);
+    }
+    if (pain < bestPain) { bestPain = pain; best = S; }
+  }
+  return best;
+}
+
 export default function OptionChainPanel({ chain }: { chain: HistoricalChain }) {
   const theme = useTheme();
   const { columns } = useChainColumnsStore();
@@ -33,6 +56,7 @@ export default function OptionChainPanel({ chain }: { chain: HistoricalChain }) 
   const totalCeOi = chain.chainData?.reduce((s, r) => s + (r.ce_oi ?? 0), 0) ?? 0;
   const totalPeOi = chain.chainData?.reduce((s, r) => s + (r.pe_oi ?? 0), 0) ?? 0;
   const pcr = chain.chainData && totalCeOi > 0 ? totalPeOi / totalCeOi : null;
+  const maxPain = chain.chainData ? computeMaxPain(chain.chainData) : null;
   const maxOi = chain.chainData
     ? Math.max(1, ...chain.chainData.flatMap(r => [r.ce_oi ?? 0, r.pe_oi ?? 0]))
     : 1;
@@ -92,9 +116,9 @@ export default function OptionChainPanel({ chain }: { chain: HistoricalChain }) 
           </select>
         )}
 
-        {/* ATM IV / Straddle Premium / PCR strip */}
+        {/* ATM IV / Straddle Premium / PCR / Max Pain strip */}
         {chain.chainData && (
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-2 gap-1.5">
             <div className="rounded-lg text-center py-1" style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}` }}>
               <div style={{ fontSize: 8, color: theme.text.faint }}>ATM IV</div>
               <div className="font-bold" style={{ fontSize: 12, color: theme.accent.purple }}>{atmIv != null ? `${atmIv.toFixed(1)}%` : "—"}</div>
@@ -106,6 +130,10 @@ export default function OptionChainPanel({ chain }: { chain: HistoricalChain }) 
             <div className="rounded-lg text-center py-1" style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}` }}>
               <div style={{ fontSize: 8, color: theme.text.faint }}>PCR (OI)</div>
               <div className="font-bold" style={{ fontSize: 12, color: theme.accent.orange }}>{pcr != null ? pcr.toFixed(2) : "—"}</div>
+            </div>
+            <div className="rounded-lg text-center py-1" style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}` }}>
+              <div style={{ fontSize: 8, color: theme.text.faint }}>Max Pain</div>
+              <div className="font-bold" style={{ fontSize: 12, color: theme.accent.green }}>{maxPain != null ? maxPain : "—"}</div>
             </div>
           </div>
         )}

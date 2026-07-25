@@ -1,16 +1,17 @@
 /**
  * TradePro Simulator - Compact Analytics Cards
- * Read-only display of already-computed payoff/margin/greeks numbers.
- * Risk:Reward and "Win Zone %" are simple derived figures computed here
- * from those same already-computed numbers — PayoffEngine/MarginEngine
- * themselves are untouched.
+ * Read-only display of already-computed payoff/margin/greeks numbers, plus
+ * POP% (Probability of Profit) from the new ProbabilityEngine. Risk:Reward
+ * is a simple ratio of two already-computed numbers — PayoffEngine/
+ * MarginEngine themselves are untouched.
  */
 import { useTheme } from "../../store/themeStore";
 
 interface Props {
-  payoff : { combined: { currentPnl: number; maxProfit: number; maxLoss: number; points: { pnl: number }[] } } | null;
+  payoff : { combined: { currentPnl: number; maxProfit: number; maxLoss: number } } | null;
   margin : { totalMargin: number } | null;
   greeks : { netDelta: number; netTheta: number } | null;
+  pop    : number | null;
   hasLegs: boolean;
 }
 
@@ -19,7 +20,7 @@ function fmtPnl(n: number): string {
   return `${sign}₹${Math.round(n).toLocaleString("en-IN")}`;
 }
 
-export default function AnalyticsCards({ payoff, margin, greeks, hasLegs }: Props) {
+export default function AnalyticsCards({ payoff, margin, greeks, pop, hasLegs }: Props) {
   const theme = useTheme();
 
   if (!hasLegs) {
@@ -34,16 +35,13 @@ export default function AnalyticsCards({ payoff, margin, greeks, hasLegs }: Prop
   const rr = combined && combined.maxLoss !== 0 && isFinite(combined.maxLoss)
     ? Math.abs(combined.maxProfit / combined.maxLoss)
     : null;
-  const winPct = combined && combined.points.length
-    ? Math.round((combined.points.filter(p => p.pnl >= 0).length / combined.points.length) * 100)
-    : null;
 
   const cards: { label: string; value: string; color: string }[] = [
     { label: "P&L",         value: combined ? fmtPnl(combined.currentPnl) : "—", color: (combined?.currentPnl ?? 0) >= 0 ? theme.accent.green : theme.accent.red },
     { label: "Max Profit",  value: combined ? fmtPnl(combined.maxProfit) : "—",  color: theme.accent.green },
     { label: "Max Loss",    value: combined ? fmtPnl(combined.maxLoss) : "—",    color: theme.accent.red },
     { label: "Risk:Reward", value: rr != null ? `1:${rr.toFixed(2)}` : "—",      color: theme.accent.cyan },
-    { label: "Win Zone %*", value: winPct != null ? `${winPct}%` : "—",          color: theme.accent.purple },
+    { label: "POP %",       value: pop != null ? `${pop}%` : "—",                color: theme.accent.purple },
     { label: "Margin Req.", value: margin ? `₹${margin.totalMargin.toLocaleString("en-IN")}` : "—", color: theme.accent.orange },
     { label: "Net Delta",   value: greeks ? greeks.netDelta.toFixed(1) : "—",  color: theme.text.secondary },
     { label: "Net Theta",   value: greeks ? greeks.netTheta.toFixed(1) : "—",  color: theme.text.secondary },
@@ -60,7 +58,7 @@ export default function AnalyticsCards({ payoff, margin, greeks, hasLegs }: Prop
         ))}
       </div>
       <div className="mt-1" style={{ color: theme.text.faint, fontSize: 9 }}>
-        *% of the plotted ±10% spot range that is profitable — an indicative read of the payoff shape, not a statistical probability forecast.
+        POP% assumes a lognormal price move at the given IV — a model estimate, not a guarantee.
       </div>
     </div>
   );
