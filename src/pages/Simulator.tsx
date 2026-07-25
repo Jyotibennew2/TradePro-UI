@@ -4,15 +4,13 @@
  * LAYOUT ONLY changed from the previous collapsible-sections version:
  *   Fixed header -> Replay Control Bar -> Walk-Forward Bar ->
  *   [ Left 35%: Option Chain + Strategy Builder | Right 65%: Payoff +
- *   Analytics + Tabbed panel ] -> Fixed bottom action bar.
+ *   Analytics + Tabbed panel ] -> Fixed bottom action bar -> floating
+ *   Position Book.
  *
  * All calculation/business logic below (calculate, portfolioGreeks, margin,
  * scenarioMatrix, adjustments, worstLevel, handleRollStrike, handleTemplate,
  * addCustomLeg, drag-reorder, handleSave/Export/Import/Load/Duplicate) is
  * the exact same logic that was already here — none of it was changed.
- * The historical-chain + walk-forward logic is the same logic too, now
- * shared via useHistoricalChain() instead of living inside one collapsible
- * section. POP% now comes from the new ProbabilityEngine.
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
@@ -46,6 +44,7 @@ import WalkForwardBar from "../simulator/components/WalkForwardBar";
 import OptionChainPanel from "../simulator/components/OptionChainPanel";
 import AnalyticsCards from "../simulator/components/AnalyticsCards";
 import TabbedBottomPanel from "../simulator/components/TabbedBottomPanel";
+import PositionBook from "../simulator/components/PositionBook";
 
 import {
   Plus, Save, Download, Upload, RefreshCw, FolderOpen,
@@ -287,7 +286,7 @@ export default function Simulator() {
     setLoadOpen(false);
   };
 
-  // ─── Duplicate leg ────────────────────────────────────────────────────────────────────────
+  // ─── Duplicate leg ─────────────────────────────────────────────────────────────────────────
   const handleDuplicate = (leg: OptionLeg) => { addLeg({ ...leg }); };
 
   // ─── Trade Log (session-only activity feed, not persisted) ───────────
@@ -596,6 +595,9 @@ export default function Simulator() {
           <LineChartIcon size={16} /><span style={{ fontSize: 9 }}>Paper Trade</span>
         </button>
       </div>
+
+      {/* Floating Position Book */}
+      <PositionBook legs={legs} spot={effectiveSpot} T={T} riskFreeRate={r} onExit={removeLeg} />
     </div>
   );
 }
