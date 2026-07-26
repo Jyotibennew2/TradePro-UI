@@ -1,27 +1,29 @@
 /**
  * TradePro Simulator - Position Book (floating panel, fully editable)
- * Same floating/collapsible/resizable panel as before, but every field is
- * now directly adjustable — instrument (strike + CE/PE), expiry (W/M),
- * action (BUY/SELL), lots (stepper + quick +2/+5/+10), and price — all via
- * the SAME onUpdate/onExit/onAddLeg handlers Strategy Builder already
- * uses (updateLeg / removeLeg / addCustomLeg in Simulator.tsx). No new
- * calculation logic — this only wires more of the existing update path
- * into this panel's UI.
  *
- * Notes on read-only fields (unchanged from before):
- *   - LTP / Greeks: live theoretical values from bsGreeks (same formula
- *     used for portfolioGreeks), recomputed as spot/legs change.
- *   - Realized PNL: always "—" — this app has no fill/close-tracking
- *     engine, legs are just added/edited/removed.
- *   - SL / Target: session-only local inputs, not persisted or wired to
- *     any backend.
- *   - Status: always "OPEN".
+ * New in this pass:
+ *   - A checkbox per leg (checked by default). Unticking a leg excludes it
+ *     from Strategy/Payoff/Greeks calculations elsewhere on the page (via
+ *     the excludedIds set lifted up to Simulator.tsx) WITHOUT removing it
+ *     from this Position Book — it just stops counting. This only changes
+ *     which legs get passed into the existing calculatePayoff /
+ *     calculatePortfolioMargin / bsGreeks calls — those functions
+ *     themselves are untouched.
+ *   - Instrument, Lots, SL and Target are now searchable dropdowns
+ *     (SearchableSelect) instead of plain inputs, per the new spec.
+ *   - Bottom summary now also shows Total Delta, Total Theta, and
+ *     Strategy P&L (same MTM sum as before, relabeled).
+ *
+ * Everything below still uses the exact same update path as before
+ * (onUpdate → updateLeg, onExit → removeLeg, onAddLeg → addCustomLeg) —
+ * no calculation logic was added or changed.
  */
 import { useState, useRef, useCallback } from "react";
 import { ChevronDown, ChevronUp, X, GripHorizontal, Briefcase, Plus, Minus } from "lucide-react";
 import { useTheme } from "../../store/themeStore";
 import { bsGreeks } from "../pricing/BlackScholes";
 import type { OptionLeg } from "../models/Option";
+import SearchableSelect from "./SearchableSelect";
 
 interface Props {
   legs: OptionLeg[];
@@ -31,22 +33,31 @@ interface Props {
   onExit: (id: string) => void;
   onUpdate: (id: string, patch: Partial<OptionLeg>) => void;
   onAddLeg: (optType: "CE" | "PE", action: "BUY" | "SELL") => void;
+  excludedIds: Set<string>;
+  onToggleActive: (id: string) => void;
+  instrumentOptions: { strike: number }[];
 }
 
-const MIN_H = 200;
-const MAX_H = 600;
-const DEFAULT_H = 380;
-const QUICK_LOTS = [1, 2, 5, 10];
+const MIN_H = 220;
+const MAX_H = 620;
+const DEFAULT_H = 420;
+const QUICK_LOTS = Array.from({ length: 20 }, (_, i) => i + 1); // 1..20
+const SL_TGT_POINTS = Array.from({ length: 51 }, (_, i) => i);   // 0..50
+const SL_TGT_PCT = Array.from({ length: 51 }, (_, i) => i);      // 0..50
 
-export default function PositionBook({ legs, spot, T, riskFreeRate, onExit, onUpdate, onAddLeg }: Props) {
+export default function PositionBook({
+  legs, spot, T, riskFreeRate, onExit, onUpdate, onAddLeg,
+  excludedIds, onToggleActive, instrumentOptions,
+}: Props) {
   const theme = useTheme();
   const [collapsed, setCollapsed] = useState(true);
   const [height, setHeight] = useState(DEFAULT_H);
-  const [slTgt, setSlTgt] = useState<Record<string, { sl: string; target: string }>>({});
+  const [slTgt, setSlTgt] = useState<Record<string, { sl: string; target: string; mode: "pt" | "pct" }>>({});
   const dragRef = useRef<{ startY: number; startH: number } | null>(null);
 
-  const updateSlTgt = (id: string, patch: Partial<{ sl: string; target: string }>) => {
-    setSlTgt(m => ({ ...m, [id]: { sl: m[id]?.sl ?? "", target: m[id]?.target ?? "", ...patch } }));
+  const getSlTgt = (id: string) => slTgt[id] ?? { sl: "0", target: "0", mode: "pt" as const };
+  const updateSlTgt = (id: string, patch: Partial<{ sl: string; target: string; mode: "pt" | "pct" }>) => {
+    setSlTgt(m => ({ ...m, [id]: { ...getSlTgt(id), ...patch } }));
   };
 
   const onDragStart = useCallback((e: React.PointerEvent) => {
@@ -68,11 +79,20 @@ export default function PositionBook({ legs, spot, T, riskFreeRate, onExit, onUp
     const qty = leg.lots * leg.contract.lotSize;
     const sign = leg.action === "BUY" ? 1 : -1;
     const mtm = (g.price - leg.entryPrice) * qty * sign;
-    return { leg, ltp: g.price, delta: g.delta, theta: g.theta, mtm, qty };
+    return {
+      leg, ltp: g.price, mtm, qty,
+      deltaPos: sign * g.delta * qty,
+      thetaPos: sign * g.theta * qty,
+    };
   });
 
   const totalMtm = rows.reduce((s, r) => s + r.mtm, 0);
   const totalQty = rows.reduce((s, r) => s + r.qty, 0);
+  const totalDelta = rows.reduce((s, r) => s + r.deltaPos, 0);
+  const totalTheta = rows.reduce((s, r) => s + r.thetaPos, 0);
+
+  const instrOptions = (optType: "CE" | "PE") =>
+    instrumentOptions.map(o => ({ value: `${o.strike}|${optType}`, label: `${o.strike} ${optType}` }));
 
   if (collapsed) {
     return (
@@ -120,7 +140,6 @@ export default function PositionBook({ legs, spot, T, riskFreeRate, onExit, onUp
         </button>
       </div>
 
-      {/* Quick add-leg bar */}
       <div className="flex gap-1.5 px-3 py-2 overflow-x-auto" style={{ borderBottom: `1px solid ${theme.border.subtle}` }}>
         {([["CE", "BUY", theme.accent.green], ["CE", "SELL", theme.accent.red], ["PE", "BUY", theme.accent.cyan], ["PE", "SELL", theme.accent.purple]] as const).map(
           ([type, action, color]) => (
@@ -142,7 +161,7 @@ export default function PositionBook({ legs, spot, T, riskFreeRate, onExit, onUp
           <table className="w-full" style={{ fontSize: 11, borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ position: "sticky", top: 0, background: theme.bg.surfaceAlt, zIndex: 1 }}>
-                {["Instrument", "Expiry", "Action", "Lots", "Avg Price", "LTP", "MTM", "Realized", "Unrealized", "Greeks (Δ/Θ)", "SL", "Target", "Status", ""].map(h => (
+                {["", "Instrument", "Expiry", "Action", "Lots", "Avg Price", "LTP", "MTM", "Realized", "Unrealized", "Greeks (Δ/Θ)", "SL", "Target", "Status", ""].map(h => (
                   <th key={h} className="px-2 py-1.5 text-left whitespace-nowrap" style={{ color: theme.text.faint, fontWeight: 700, borderBottom: `1px solid ${theme.border.subtle}` }}>
                     {h}
                   </th>
@@ -150,29 +169,47 @@ export default function PositionBook({ legs, spot, T, riskFreeRate, onExit, onUp
               </tr>
             </thead>
             <tbody>
-              {rows.map(({ leg, ltp, delta, theta, mtm }) => {
-                const s = slTgt[leg.id] ?? { sl: "", target: "" };
+              {rows.map(({ leg, ltp, mtm, deltaPos, thetaPos }) => {
+                const st = getSlTgt(leg.id);
                 const isBuy = leg.action === "BUY";
                 const isCE = leg.contract.optionType === "CE";
+                const active = !excludedIds.has(leg.id);
+                const slOpts = (st.mode === "pt" ? SL_TGT_POINTS : SL_TGT_PCT).map(n => ({ value: String(n), label: st.mode === "pt" ? `${n} pt` : `${n}%` }));
+
                 return (
-                  <tr key={leg.id} style={{ borderBottom: `1px solid ${theme.border.subtle}` }}>
-                    {/* Instrument: strike input + CE/PE toggle */}
+                  <tr key={leg.id} style={{ borderBottom: `1px solid ${theme.border.subtle}`, opacity: active ? 1 : 0.45 }}>
+                    {/* Include/exclude checkbox */}
+                    <td className="px-1 py-1.5">
+                      <button
+                        onClick={() => onToggleActive(leg.id)}
+                        title={active ? "Included in Strategy/Payoff — tap to exclude" : "Excluded from Strategy/Payoff — tap to include"}
+                        className="w-5 h-5 rounded flex items-center justify-center font-black"
+                        style={{
+                          background: active ? theme.accent.green : theme.bg.surface,
+                          border: `1px solid ${active ? theme.accent.green : theme.border.subtle}`,
+                          color: active ? theme.bg.page : "transparent",
+                        }}
+                      >
+                        ✓
+                      </button>
+                    </td>
+
+                    {/* Instrument: searchable strike+type */}
                     <td className="px-2 py-1.5 whitespace-nowrap">
                       <div className="flex items-center gap-1">
                         <span className="font-bold" style={{ color: theme.text.faint, fontSize: 10 }}>{leg.contract.symbol}</span>
-                        <input type="number" value={leg.contract.strike}
-                          onChange={e => onUpdate(leg.id, { contract: { ...leg.contract, strike: Number(e.target.value) } })}
-                          className="w-16 px-1 py-0.5 rounded text-center outline-none font-bold"
-                          style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.text.primary }} />
-                        <button onClick={() => onUpdate(leg.id, { contract: { ...leg.contract, optionType: isCE ? "PE" : "CE" } })}
-                          className="px-1.5 py-0.5 rounded font-black"
-                          style={{ color: isCE ? theme.accent.cyan : theme.accent.purple, background: (isCE ? theme.accent.cyan : theme.accent.purple) + "18" }}>
-                          {leg.contract.optionType}
-                        </button>
+                        <SearchableSelect
+                          widthClass="w-28"
+                          value={`${leg.contract.strike}|${leg.contract.optionType}`}
+                          onSelect={(v) => {
+                            const [strikeStr, optType] = v.split("|");
+                            onUpdate(leg.id, { contract: { ...leg.contract, strike: Number(strikeStr), optionType: optType as "CE" | "PE" } });
+                          }}
+                          options={[...instrOptions("CE"), ...instrOptions("PE")]}
+                        />
                       </div>
                     </td>
 
-                    {/* Expiry: W/M toggle */}
                     <td className="px-2 py-1.5">
                       <button onClick={() => onUpdate(leg.id, { contract: { ...leg.contract, expiryType: leg.contract.expiryType === "WEEKLY" ? "MONTHLY" : "WEEKLY" } })}
                         className="px-2 py-0.5 rounded font-bold" style={{ background: theme.border.subtle, color: theme.text.secondary }}>
@@ -180,7 +217,6 @@ export default function PositionBook({ legs, spot, T, riskFreeRate, onExit, onUp
                       </button>
                     </td>
 
-                    {/* Action: BUY/SELL toggle */}
                     <td className="px-2 py-1.5">
                       <button onClick={() => onUpdate(leg.id, { action: isBuy ? "SELL" : "BUY" })}
                         className="px-2 py-0.5 rounded font-black"
@@ -189,37 +225,26 @@ export default function PositionBook({ legs, spot, T, riskFreeRate, onExit, onUp
                       </button>
                     </td>
 
-                    {/* Lots: stepper + quick buttons */}
+                    {/* Lots: stepper + searchable 1-20 */}
                     <td className="px-2 py-1.5">
-                      <div className="flex items-center gap-1 mb-1">
+                      <div className="flex items-center gap-1">
                         <button onClick={() => onUpdate(leg.id, { lots: Math.max(1, leg.lots - 1) })}
                           className="p-0.5 rounded" style={{ background: theme.border.subtle, color: theme.text.secondary }}>
                           <Minus size={11} />
                         </button>
-                        <input type="number" min={1} value={leg.lots}
-                          onChange={e => onUpdate(leg.id, { lots: Math.max(1, Number(e.target.value)) })}
-                          className="w-10 px-1 py-0.5 rounded text-center outline-none font-bold"
-                          style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.text.primary }} />
+                        <SearchableSelect
+                          widthClass="w-14"
+                          value={String(leg.lots)}
+                          onSelect={(v) => onUpdate(leg.id, { lots: Number(v) })}
+                          options={QUICK_LOTS.map(n => ({ value: String(n), label: String(n) }))}
+                        />
                         <button onClick={() => onUpdate(leg.id, { lots: leg.lots + 1 })}
                           className="p-0.5 rounded" style={{ background: theme.border.subtle, color: theme.text.secondary }}>
                           <Plus size={11} />
                         </button>
                       </div>
-                      <div className="flex gap-0.5">
-                        {QUICK_LOTS.map(n => (
-                          <button key={n} onClick={() => onUpdate(leg.id, { lots: n })}
-                            className="px-1 rounded"
-                            style={{
-                              fontSize: 9, color: leg.lots === n ? theme.bg.page : theme.text.faint,
-                              background: leg.lots === n ? theme.accent.cyan : theme.border.subtle,
-                            }}>
-                            {n}
-                          </button>
-                        ))}
-                      </div>
                     </td>
 
-                    {/* Avg Price: editable */}
                     <td className="px-2 py-1.5">
                       <input type="number" min={0.05} step={0.05} value={leg.entryPrice}
                         onChange={e => onUpdate(leg.id, { entryPrice: Number(e.target.value) })}
@@ -235,18 +260,24 @@ export default function PositionBook({ legs, spot, T, riskFreeRate, onExit, onUp
                     <td className="px-2 py-1.5 font-bold" style={{ color: mtm >= 0 ? theme.accent.green : theme.accent.red }}>
                       {mtm >= 0 ? "+" : ""}₹{Math.round(mtm).toLocaleString("en-IN")}
                     </td>
-                    <td className="px-2 py-1.5 whitespace-nowrap" style={{ color: theme.text.faint }}>{delta.toFixed(2)} / {theta.toFixed(1)}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap" style={{ color: theme.text.faint }}>
+                      {deltaPos.toFixed(1)} / {thetaPos.toFixed(1)}
+                    </td>
 
+                    {/* SL: mode toggle + searchable value */}
                     <td className="px-1 py-1">
-                      <input value={s.sl} onChange={e => updateSlTgt(leg.id, { sl: e.target.value })} placeholder="-"
-                        className="w-14 px-1 py-0.5 rounded text-center outline-none"
-                        style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.accent.red }} />
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => updateSlTgt(leg.id, { mode: st.mode === "pt" ? "pct" : "pt" })}
+                          className="px-1 rounded font-bold" style={{ fontSize: 9, background: theme.border.subtle, color: theme.text.faint }}>
+                          {st.mode === "pt" ? "pt" : "%"}
+                        </button>
+                        <SearchableSelect widthClass="w-16" value={st.sl} onSelect={(v) => updateSlTgt(leg.id, { sl: v })} options={slOpts} />
+                      </div>
                     </td>
                     <td className="px-1 py-1">
-                      <input value={s.target} onChange={e => updateSlTgt(leg.id, { target: e.target.value })} placeholder="-"
-                        className="w-14 px-1 py-0.5 rounded text-center outline-none"
-                        style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.accent.green }} />
+                      <SearchableSelect widthClass="w-16" value={st.target} onSelect={(v) => updateSlTgt(leg.id, { target: v })} options={slOpts} />
                     </td>
+
                     <td className="px-2 py-1.5">
                       <span className="px-1.5 py-0.5 rounded font-bold" style={{ color: theme.accent.cyan, background: theme.accent.cyan + "18" }}>OPEN</span>
                     </td>
@@ -274,11 +305,15 @@ export default function PositionBook({ legs, spot, T, riskFreeRate, onExit, onUp
             <div className="font-bold" style={{ fontSize: 12, color: theme.text.secondary }}>{totalQty}</div>
           </div>
           <div className="text-center">
-            <div style={{ fontSize: 9, color: theme.text.faint }}>Realized</div>
-            <div className="font-bold" style={{ fontSize: 12, color: theme.text.faint }}>—</div>
+            <div style={{ fontSize: 9, color: theme.text.faint }}>Total Delta</div>
+            <div className="font-bold" style={{ fontSize: 12, color: theme.text.secondary }}>{totalDelta.toFixed(1)}</div>
           </div>
           <div className="text-center">
-            <div style={{ fontSize: 9, color: theme.text.faint }}>Total MTM / Unrealized</div>
+            <div style={{ fontSize: 9, color: theme.text.faint }}>Total Theta</div>
+            <div className="font-bold" style={{ fontSize: 12, color: theme.text.secondary }}>{totalTheta.toFixed(1)}</div>
+          </div>
+          <div className="text-center">
+            <div style={{ fontSize: 9, color: theme.text.faint }}>Strategy P&L</div>
             <div className="font-black" style={{ fontSize: 14, color: totalMtm >= 0 ? theme.accent.green : theme.accent.red }}>
               {totalMtm >= 0 ? "+" : ""}₹{Math.round(totalMtm).toLocaleString("en-IN")}
             </div>
