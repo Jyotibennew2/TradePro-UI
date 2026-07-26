@@ -1,8 +1,12 @@
 /**
  * TradePro Simulator - Option Chain panel (left workspace column, Section A)
  * StockMock-style visual polish pass:
- *   - multi-expiry tab row (with DTE) instead of a dropdown
- *   - ATM IV / Straddle Premium / PCR / Max Pain summary strip
+ *   - multi-expiry tab row (with DTE) + a searchable expiry jump dropdown
+ *     beside it — selecting an expiry loads instantly while the current
+ *     date/time selection is preserved by the hook where possible.
+ *   - ATM IV / Straddle Premium / PCR / Max Pain summary strip (derived
+ *     client-side from the already-fetched chain data — no new backend
+ *     calculation)
  *   - OI bars behind the OI column, scaled to the max OI on screen
  * Underlying data/handlers (useHistoricalChain) are unchanged.
  */
@@ -13,6 +17,7 @@ import Loader from "../../components/ui/Loader";
 import ErrorBox from "../../components/ui/ErrorBox";
 import { SYMBOLS, OPTIONAL_COLS, fmt, fmtDateLabel } from "../hooks/useHistoricalChain";
 import type { HistoricalChain } from "../hooks/useHistoricalChain";
+import SearchableSelect from "./SearchableSelect";
 
 function dteFor(expiry: string, fromDate: string): number | null {
   if (!fromDate) return null;
@@ -86,24 +91,33 @@ export default function OptionChainPanel({ chain }: { chain: HistoricalChain }) 
           Archive currently covers NIFTY &amp; BANKNIFTY only.
         </div>
 
-        {/* Multi-expiry tab row with DTE */}
+        {/* Multi-expiry tab row with DTE + searchable jump */}
         {chain.expiries.length > 0 && (
-          <div className="flex gap-1 overflow-x-auto pb-1">
-            {chain.expiries.map(e => {
-              const dte = dteFor(e, chain.selectedDate);
-              const active = chain.expiry === e;
-              return (
-                <button
-                  key={e}
-                  onClick={() => chain.setExpiry(e)}
-                  className="shrink-0 px-2 py-1 rounded-lg text-center"
-                  style={{ background: active ? theme.accent.cyan : theme.bg.surface, border: `1px solid ${active ? theme.accent.cyan : theme.border.subtle}` }}
-                >
-                  <div style={{ fontSize: 11, fontWeight: 800, color: active ? theme.bg.page : theme.text.secondary }}>{fmtDateLabel(e)}</div>
-                  {dte != null && <div style={{ fontSize: 8, color: active ? theme.bg.page : theme.text.faint }}>{dte} DTE</div>}
-                </button>
-              );
-            })}
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1 overflow-x-auto pb-1 flex-1">
+              {chain.expiries.map(e => {
+                const dte = dteFor(e, chain.selectedDate);
+                const active = chain.expiry === e;
+                return (
+                  <button
+                    key={e}
+                    onClick={() => chain.setExpiry(e)}
+                    className="shrink-0 px-2 py-1 rounded-lg text-center"
+                    style={{ background: active ? theme.accent.cyan : theme.bg.surface, border: `1px solid ${active ? theme.accent.cyan : theme.border.subtle}` }}
+                  >
+                    <div style={{ fontSize: 11, fontWeight: 800, color: active ? theme.bg.page : theme.text.secondary }}>{fmtDateLabel(e)}</div>
+                    {dte != null && <div style={{ fontSize: 8, color: active ? theme.bg.page : theme.text.faint }}>{dte} DTE</div>}
+                  </button>
+                );
+              })}
+            </div>
+            <SearchableSelect
+              widthClass="w-28 shrink-0"
+              value={chain.expiry}
+              onSelect={chain.setExpiry}
+              placeholder="Jump..."
+              options={chain.expiries.map(e => ({ value: e, label: fmtDateLabel(e) }))}
+            />
           </div>
         )}
 
