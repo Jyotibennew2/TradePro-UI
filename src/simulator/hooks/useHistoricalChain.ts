@@ -95,6 +95,11 @@ export function useHistoricalChain() {
   const [wfLoading, setWfLoading] = useState(false);
   const [wfError, setWfError]     = useState("");
 
+  // Remember the currently-selected date/time so an expiry change can try
+  // to preserve them instead of always jumping to the latest snapshot.
+  const selectedDateRef = useRef("");
+  const selectedTimeRef = useRef<number | null>(null);
+
   // Expiries for the selected symbol
   useEffect(() => {
     fetchArchivedExpiries(symbol)
@@ -106,28 +111,44 @@ export function useHistoricalChain() {
       .catch(() => { setExpiries([]); setExpiry(""); });
   }, [symbol]);
 
-  // Dates for the selected expiry
+  // Dates for the selected expiry — keep the same date selected if this
+  // expiry also has data for it, instead of always jumping to the latest.
   useEffect(() => {
     if (!expiry) { setDates([]); return; }
     fetchArchivedDates(symbol, expiry)
       .then(r => {
         const d = r.dates ?? [];
         setDates(d);
-        setDateIdx(Math.max(d.length - 1, 0));
+        const prev = selectedDateRef.current;
+        const idx = prev ? d.indexOf(prev) : -1;
+        setDateIdx(idx >= 0 ? idx : Math.max(d.length - 1, 0));
       })
       .catch(() => setDates([]));
   }, [symbol, expiry]);
 
   const selectedDate = dates[dateIdx] ?? "";
+  useEffect(() => { selectedDateRef.current = selectedDate; }, [selectedDate]);
+  useEffect(() => { selectedTimeRef.current = times[timeIdx] ?? null; }, [times, timeIdx]);
 
-  // Times for the selected date
+  // Times for the selected date — try to keep the same time of day selected
+  // (closest match) instead of always jumping to the latest snapshot.
   useEffect(() => {
     if (!expiry || !selectedDate) { setTimes([]); return; }
     fetchArchivedTimes(symbol, selectedDate, expiry)
       .then(r => {
         const t = r.times ?? [];
         setTimes(t);
-        setTimeIdx(Math.max(t.length - 1, 0));
+        const prevT = selectedTimeRef.current;
+        if (prevT != null && t.length > 0) {
+          let bestIdx = 0, bestDiff = Infinity;
+          t.forEach((epoch, i) => {
+            const diff = Math.abs(epoch - prevT);
+            if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+          });
+          setTimeIdx(bestIdx);
+        } else {
+          setTimeIdx(Math.max(t.length - 1, 0));
+        }
       })
       .catch(() => setTimes([]));
   }, [symbol, expiry, selectedDate]);
