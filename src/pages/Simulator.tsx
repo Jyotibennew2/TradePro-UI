@@ -80,7 +80,6 @@ export default function Simulator() {
 
   const flashToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
-  // ─── Calculate ────────────────────────────────────────────────────────────────────────────────
   const calculate = useCallback(() => {
     if (!legs.length) return;
     setIsCalculating(true);
@@ -99,12 +98,10 @@ export default function Simulator() {
     }
   }, [legs, effectiveSpot, daysToExpiry, r]);
 
-  // Auto-calculate payoff when legs change — user never has to press Calculate
   useEffect(() => {
     if (legs.length > 0) calculate();
   }, [legs, calculate]);
 
-  // ─── Portfolio Greeks ──────────────────────────────────────────────────────────────
   const portfolioGreeks: PortfolioGreeks = legs.reduce(
     (acc, leg) => {
       const g = bsGreeks({
@@ -129,16 +126,12 @@ export default function Simulator() {
     { netDelta: 0, netGamma: 0, netTheta: 0, netVega: 0, netRho: 0, totalValue: 0 }
   );
 
-  // ─── Margin ─────────────────────────────────────────────────────────────────────────────
   const margin = legs.length ? calculatePortfolioMargin(legs, effectiveSpot) : null;
 
-  // ─── Scenario matrix ────────────────────────────────────────────────────────────────
   const scenarioMatrix = legs.length ? buildScenarioMatrix(legs, effectiveSpot, iv, daysToExpiry, r) : null;
 
-  // ─── Probability of Profit ──────────────────────────────────────────────────────────
   const pop = legs.length ? probabilityOfProfit(legs, effectiveSpot, iv, daysToExpiry, r) : null;
 
-  // ─── Adjustments ─────────────────────────────────────────────────────────────────────────────
   type ThreatLevel = "safe" | "watch" | "danger";
   const BUFFER_WATCH = 0.03;
   const BUFFER_DANGER = 0.01;
@@ -195,7 +188,6 @@ export default function Simulator() {
     }
   };
 
-  // ─── Apply template requested from Screener page ─────────────────
   const location = useLocation();
   const navigate = useNavigate();
   useEffect(() => {
@@ -207,7 +199,6 @@ export default function Simulator() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ─── Add custom leg ──────────────────────────────────────────────────────────────────────
   const addCustomLeg = (optType: "CE" | "PE", action: "BUY" | "SELL") => {
     const strike = Math.round(effectiveSpot / 50) * 50;
     addLeg(makeOptionLeg(
@@ -217,7 +208,6 @@ export default function Simulator() {
     ));
   };
 
-  // ─── Drag reorder ──────────────────────────────────────────────────────────────────────────
   const [dragOver, setDragOver] = useState<number | null>(null);
   const handleDrop = () => {
     if (dragFrom === null || dragOver === null || dragFrom === dragOver) return;
@@ -229,7 +219,6 @@ export default function Simulator() {
     setDragFrom(null); setDragOver(null);
   };
 
-  // ─── Save ───────────────────────────────────────────────────────────────────────────────
   const handleSave = () => {
     if (!legs.length) { setSaveMsg("Add legs first"); setTimeout(() => setSaveMsg(""), 2000); return; }
     const s: BuiltStrategy = {
@@ -250,7 +239,6 @@ export default function Simulator() {
     setTimeout(() => setSaveMsg(""), 2000);
   };
 
-  // ─── Export ──────────────────────────────────────────────────────────────────────────────
   const handleExport = () => {
     if (!legs.length) return;
     const s: BuiltStrategy = {
@@ -264,7 +252,6 @@ export default function Simulator() {
     strategyStorage.exportStrategy(s);
   };
 
-  // ─── Import ──────────────────────────────────────────────────────────────────────────────
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -278,7 +265,6 @@ export default function Simulator() {
     } catch { setSaveMsg("Invalid file"); setTimeout(() => setSaveMsg(""), 2000); }
   };
 
-  // ─── Load saved ─────────────────────────────────────────────────────────────────────────────
   const handleLoad = (s: BuiltStrategy) => {
     clearLegs();
     s.legs.forEach(l => addLeg(l));
@@ -286,10 +272,8 @@ export default function Simulator() {
     setLoadOpen(false);
   };
 
-  // ─── Duplicate leg ─────────────────────────────────────────────────────────────────────────
   const handleDuplicate = (leg: OptionLeg) => { addLeg({ ...leg }); };
 
-  // ─── Trade Log (session-only activity feed, not persisted) ───────────
   const [tradeLog, setTradeLog] = useState<{ t: number; text: string }[]>([]);
   const prevLegsRef = useRef<OptionLeg[]>([]);
   useEffect(() => {
@@ -305,7 +289,6 @@ export default function Simulator() {
     prevLegsRef.current = legs;
   }, [legs]);
 
-  // ─── Paper Trade (places each leg via the existing paper-trade API) ─────
   const handlePaperTrade = async () => {
     if (!legs.length) { flashToast("Add legs first"); return; }
     flashToast("Placing paper orders…");
@@ -329,7 +312,6 @@ export default function Simulator() {
     flashToast(`Paper trade: ${ok} placed${fail ? `, ${fail} failed` : ""}`);
   };
 
-  // ─── Historical chain + walk-forward (shared across replay/WF bars + panel) ─
   const chain = useHistoricalChain();
 
   const deployLabel = lastSavedAt
@@ -338,7 +320,6 @@ export default function Simulator() {
 
   return (
     <div className="flex flex-col h-full" style={{ background: theme.bg.page }}>
-      {/* ══════════ FIXED HEADER ══════════ */}
       <div className="flex items-center justify-between gap-3 px-3 py-2 flex-wrap"
         style={{ background: theme.bg.surface, borderBottom: `1px solid ${theme.border.subtle}` }}>
         <div className="flex items-center gap-2 shrink-0">
@@ -423,22 +404,16 @@ export default function Simulator() {
         <div className="text-sm text-center py-1" style={{ background: theme.accent.green + "10", color: theme.accent.green }}>{saveMsg}</div>
       )}
 
-      {/* ══════════ REPLAY CONTROL BAR ══════════ */}
       <ReplayControlBar chain={chain} />
 
-      {/* ══════════ WALK FORWARD BAR ══════════ */}
       <WalkForwardBar chain={chain} />
 
-      {/* ══════════ MAIN WORKSPACE ══════════ */}
       <div className="flex-1 overflow-y-auto p-3 pb-24">
         <div className="grid grid-cols-1 lg:grid-cols-[35%_65%] gap-3 items-start">
 
-          {/* ───────── LEFT PANEL (35%) ───────── */}
           <div className="space-y-3">
-            {/* Section A: Option Chain */}
             <OptionChainPanel chain={chain} />
 
-            {/* Section B: Strategy Builder */}
             <Card title="Strategy Builder">
               <div className="space-y-3">
                 <div>
@@ -526,9 +501,7 @@ export default function Simulator() {
             </Card>
           </div>
 
-          {/* ───────── RIGHT PANEL (65%) ───────── */}
           <div className="space-y-3">
-            {/* Live Payoff Chart — refreshes automatically, no Calculate needed */}
             <Card title="Live Payoff" extra={
               <div className="flex items-center gap-2">
                 <LineChartIcon size={13} color={theme.text.muted} />
@@ -550,12 +523,10 @@ export default function Simulator() {
               )}
             </Card>
 
-            {/* Compact analytics cards */}
             <Card title="Analytics">
               <AnalyticsCards payoff={payoff} margin={margin} greeks={portfolioGreeks} pop={pop} hasLegs={legs.length > 0} />
             </Card>
 
-            {/* Tabbed bottom section */}
             <TabbedBottomPanel
               greeks={portfolioGreeks}
               scenarioMatrix={scenarioMatrix}
@@ -570,7 +541,6 @@ export default function Simulator() {
         </div>
       </div>
 
-      {/* ══════════ FIXED BOTTOM ACTION BAR ══════════ */}
       <div className="fixed bottom-0 left-0 right-0 flex items-center justify-around gap-1 px-2 py-2 z-20 overflow-x-auto"
         style={{ background: theme.bg.surface, borderTop: `1px solid ${theme.border.subtle}` }}>
         <button onClick={calculate} className="flex flex-col items-center gap-0.5 px-2 shrink-0" style={{ color: theme.accent.cyan }}>
@@ -596,8 +566,15 @@ export default function Simulator() {
         </button>
       </div>
 
-      {/* Floating Position Book */}
-      <PositionBook legs={legs} spot={effectiveSpot} T={T} riskFreeRate={r} onExit={removeLeg} />
+      <PositionBook
+        legs={legs}
+        spot={effectiveSpot}
+        T={T}
+        riskFreeRate={r}
+        onExit={removeLeg}
+        onUpdate={updateLeg}
+        onAddLeg={addCustomLeg}
+      />
     </div>
   );
 }
