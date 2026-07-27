@@ -18,9 +18,15 @@
  * adjustments below — the underlying calculatePayoff/calculatePortfolioMargin/
  * bsGreeks functions themselves are untouched, only which legs get passed
  * into them changed.
+ *
+ * BUGFIX: activeLegs is now memoized (useMemo) instead of a plain
+ * `.filter()` on every render. Without memoization it got a new array
+ * identity every render, which made calculate()'s useCallback (and the
+ * effect that calls it) re-fire every render — an infinite render loop
+ * that froze the page to a blank black screen shortly after load.
  */
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAppStore } from "../store";
 import { useTheme } from "../store/themeStore";
@@ -89,8 +95,14 @@ export default function Simulator() {
   const effectiveSpot = spot || (underlying === "NIFTY" ? nifty : bankNifty) || 24300;
   // Legs with their Position Book checkbox ticked — only these feed the
   // Strategy/Payoff/Greeks calculations below. An unticked leg stays
-  // visible everywhere else, it just stops counting here.
-  const activeLegs = legs.filter(l => !excludedLegIds.has(l.id));
+  // visible everywhere else, it just stops counting here. Memoized so this
+  // array only gets a new identity when legs or the ticked-state actually
+  // change — without this, calculate()'s effect below would re-fire every
+  // render and loop forever.
+  const activeLegs = useMemo(
+    () => legs.filter(l => !excludedLegIds.has(l.id)),
+    [legs, excludedLegIds]
+  );
   const T = daysToYears(daysToExpiry);
   const r = riskFreeRate / 100;
   const sigmaBase = iv / 100;
