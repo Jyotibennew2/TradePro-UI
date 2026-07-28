@@ -2,21 +2,27 @@
  * TradePro Simulator - Position Book (floating panel, fully editable)
  *
  * New in this pass:
+ *   - Expiry column is now a searchable Expiry Date dropdown (real archive
+ *     dates) instead of a Weekly/Monthly toggle. Picking a new expiry also
+ *     loads that leg's real historical entry price for the current replay
+ *     position (see onChangeLegExpiry in Simulator.tsx).
+ *   - LTP + Greeks now use the real archived snapshot (liveOverrides) when
+ *     the leg's own expiry matches the currently browsed Historical Option
+ *     Chain expiry — shown with a small LIVE badge — falling back to the
+ *     theoretical bsGreeks price otherwise, exactly as before.
  *   - A checkbox per leg (checked by default). Unticking a leg excludes it
  *     from Strategy/Payoff/Greeks calculations elsewhere on the page (via
  *     the excludedIds set lifted up to Simulator.tsx) WITHOUT removing it
- *     from this Position Book — it just stops counting. This only changes
- *     which legs get passed into the existing calculatePayoff /
- *     calculatePortfolioMargin / bsGreeks calls — those functions
- *     themselves are untouched.
- *   - Instrument, Lots, SL and Target are now searchable dropdowns
- *     (SearchableSelect) instead of plain inputs, per the new spec.
- *   - Bottom summary now also shows Total Delta, Total Theta, and
- *     Strategy P&L (same MTM sum as before, relabeled).
+ *     from this Position Book — it just stops counting.
+ *   - Instrument, Lots, SL and Target are searchable dropdowns
+ *     (SearchableSelect).
+ *   - Bottom summary shows Total Delta, Total Theta, and Strategy P&L.
  *
- * Everything below still uses the exact same update path as before
+ * Everything still uses the exact same update path as before
  * (onUpdate → updateLeg, onExit → removeLeg, onAddLeg → addCustomLeg) —
- * no calculation logic was added or changed.
+ * no calculation logic was added or changed; liveOverrides/expiryOptions
+ * are computed in Simulator.tsx from the existing archived-chain API and
+ * passed in as plain data.
  */
 import { useState, useRef, useCallback } from "react";
 import { ChevronDown, ChevronUp, X, GripHorizontal, Briefcase, Plus, Minus } from "lucide-react";
@@ -36,6 +42,14 @@ interface Props {
   excludedIds: Set<string>;
   onToggleActive: (id: string) => void;
   instrumentOptions: { strike: number }[];
+  /** Real archived LTP/IV for legs whose expiry matches the currently
+   *  browsed Historical Option Chain expiry — synced on every replay step. */
+  liveOverrides: Record<string, { ltp: number; iv: number }>;
+  /** All expiry dates available in the archive, for the per-leg Expiry
+   *  Date dropdown. */
+  expiryOptions: string[];
+  expiryLabel: (expiry: string) => string;
+  onChangeLegExpiry: (leg: OptionLeg, newExpiry: string) => void;
 }
 
 const MIN_H = 220;
@@ -48,6 +62,7 @@ const SL_TGT_PCT = Array.from({ length: 51 }, (_, i) => i);      // 0..50
 export default function PositionBook({
   legs, spot, T, riskFreeRate, onExit, onUpdate, onAddLeg,
   excludedIds, onToggleActive, instrumentOptions,
+  liveOverrides, expiryOptions, expiryLabel, onChangeLegExpiry,
 }: Props) {
   const theme = useTheme();
   const [collapsed, setCollapsed] = useState(true);
@@ -72,15 +87,17 @@ export default function PositionBook({
   const onDragEnd = useCallback(() => { dragRef.current = null; }, []);
 
   const rows = legs.map(leg => {
+    const ov = liveOverrides[leg.id];
     const g = bsGreeks({
       spot, strike: leg.contract.strike, timeToExpiry: T,
-      riskFreeRate, volatility: leg.iv / 100, optionType: leg.contract.optionType,
+      riskFreeRate, volatility: (ov?.iv ?? leg.iv) / 100, optionType: leg.contract.optionType,
     });
+    const ltp = ov?.ltp ?? g.price;
     const qty = leg.lots * leg.contract.lotSize;
     const sign = leg.action === "BUY" ? 1 : -1;
-    const mtm = (g.price - leg.entryPrice) * qty * sign;
+    const mtm = (ltp - leg.entryPrice) * qty * sign;
     return {
-      leg, ltp: g.price, mtm, qty,
+      leg, ltp, mtm, qty, isLive: ov != null,
       deltaPos: sign * g.delta * qty,
       thetaPos: sign * g.theta * qty,
     };
@@ -169,7 +186,7 @@ export default function PositionBook({
               </tr>
             </thead>
             <tbody>
-              {rows.map(({ leg, ltp, mtm, deltaPos, thetaPos }) => {
+              {rows.map(({ leg, ltp, mtm, deltaPos, thetaPos, isLive }) => {
                 const st = getSlTgt(leg.id);
                 const isBuy = leg.action === "BUY";
                 const isCE = leg.contract.optionType === "CE";
@@ -211,10 +228,13 @@ export default function PositionBook({
                     </td>
 
                     <td className="px-2 py-1.5">
-                      <button onClick={() => onUpdate(leg.id, { contract: { ...leg.contract, expiryType: leg.contract.expiryType === "WEEKLY" ? "MONTHLY" : "WEEKLY" } })}
-                        className="px-2 py-0.5 rounded font-bold" style={{ background: theme.border.subtle, color: theme.text.secondary }}>
-                        {leg.contract.expiryType === "WEEKLY" ? "Weekly" : "Monthly"}
-                      </button>
+                      <SearchableSelect
+                        widthClass="w-24"
+                        value={leg.contract.expiry || ""}
+                        onSelect={(v) => onChangeLegExpiry(leg, v)}
+                        placeholder="Expiry"
+                        options={expiryOptions.map(e => ({ value: e, label: expiryLabel(e) }))}
+                      />
                     </td>
 
                     <td className="px-2 py-1.5">
@@ -252,7 +272,10 @@ export default function PositionBook({
                         style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.accent.cyan }} />
                     </td>
 
-                    <td className="px-2 py-1.5 font-bold" style={{ color: theme.accent.cyan }}>₹{ltp.toFixed(2)}</td>
+                    <td className="px-2 py-1.5 font-bold whitespace-nowrap" style={{ color: theme.accent.cyan }}>
+                      ₹{ltp.toFixed(2)}
+                      {isLive && <span className="ml-1 px-1 rounded" style={{ fontSize: 7, color: theme.accent.green, background: theme.accent.green + "18" }}>LIVE</span>}
+                    </td>
                     <td className="px-2 py-1.5 font-bold" style={{ color: mtm >= 0 ? theme.accent.green : theme.accent.red }}>
                       {mtm >= 0 ? "+" : ""}₹{Math.round(mtm).toLocaleString("en-IN")}
                     </td>
