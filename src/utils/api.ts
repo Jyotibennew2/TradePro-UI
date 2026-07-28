@@ -309,27 +309,48 @@ export const fetchBatchSummary = (batchId: string) =>
     `/backtest/batch/results?batch_id=${batchId}&summary=true`
   );
 
+/** One option leg as it was actually traded in a batch-backtest scenario. */
+export interface BatchLeg {
+  strike     : number;
+  option_type: "CE" | "PE";
+  action     : "BUY" | "SELL";
+  lots       : number;
+}
+
 export interface BatchResultRow {
   id           : number;
   batch_id     : string;
   created_at   : number;
   symbol       : string;
   strategy     : string;
-  expiry_date  : string;
+  expiry_date  : string;    // YYYY-MM-DD - which expiry contract this trade used
   strike_offset: number;
   timeframe    : string;
+  legs         : BatchLeg[]; // exact strikes/CE-PE/BUY-SELL/lots that were traded
+  entry_spot   : number;
+  entry_premium: number;    // total premium collected/paid at entry
+  sl_amount    : number;    // stop-loss amount actually applied (currency, not %)
+  tgt_amount   : number;    // target amount actually applied
   entry_t      : number;
   exit_t       : number;
-  exit_reason  : string;
+  exit_spot    : number;
+  exit_reason  : string;    // "SL Hit" | "Target Hit" | "data_ended"
   pnl          : number;
-  entry_premium: number;
   was_mock     : number;
 }
 
-/** Every individual scenario result for one batch run, ranked best PnL first. */
-export const fetchBatchResults = (batchId: string) =>
+/**
+ * Individual scenario results for one batch run, ranked best PnL first -
+ * each row includes the exact legs traded, SL/target amounts applied, and
+ * exit reason, so any result can be fully explained (which expiry, which
+ * strike, buy or sell, how much SL, why it exited).
+ *
+ * Pass symbol/strategy to drill into one group from the summary view
+ * (e.g. the row the user tapped on) instead of the whole batch.
+ */
+export const fetchBatchResults = (batchId: string, symbol?: string, strategy?: string, limit = 100) =>
   get<{ success: boolean; batch_id: string; results: BatchResultRow[] }>(
-    `/backtest/batch/results?batch_id=${batchId}`
+    `/backtest/batch/results?batch_id=${batchId}${symbol ? `&symbol=${symbol}` : ""}${strategy ? `&strategy=${strategy}` : ""}&limit=${limit}`
   );
 
 // ─── Greeks ──────────────────────────────────────────────────────────────────
