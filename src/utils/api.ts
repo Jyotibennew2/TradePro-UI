@@ -236,6 +236,102 @@ export const runWalkForwardBacktest = (params: {
   exit_time   : params.exitTime,
 });
 
+// ─── Multi-scenario Batch Backtest (many expiries x strikes x timeframes x
+// strategies, incl. Greeks-driven Delta-Neutral / Theta-Harvest, in one run) ──
+export type BatchStrategy = "straddle" | "strangle" | "iron_condor" | "delta_neutral" | "theta_harvest";
+
+export interface BatchTriggerResponse {
+  success: boolean;
+  job_id : string;
+  status : "running";
+  note   : string;
+}
+
+export interface BatchStatusResponse {
+  success: boolean;
+  job_id : string;
+  status : "running" | "done" | "error";
+  result : { batch_id: string; scenarios_run: number; saved: number; skipped: number } | null;
+  error  : string | null;
+}
+
+export const runBatchBacktest = (params: {
+  symbols               : string[];
+  strategies?           : BatchStrategy[];
+  strikeOffsets?        : number[];
+  timeframes?           : string[];
+  slPct?                : number;
+  tgtPct?                : number;
+  lots?                  : number;
+  maxEntriesPerExpiry?   : number;
+}) => post<BatchTriggerResponse>("/backtest/batch", {
+  symbols                : params.symbols,
+  strategies             : params.strategies,
+  strike_offsets         : params.strikeOffsets,
+  timeframes             : params.timeframes,
+  sl_pct                 : params.slPct ?? 50,
+  tgt_pct                : params.tgtPct ?? 50,
+  lots                   : params.lots ?? 1,
+  max_entries_per_expiry : params.maxEntriesPerExpiry ?? 20,
+});
+
+export const fetchBatchStatus = (jobId: string) =>
+  get<BatchStatusResponse>(`/backtest/batch/status/${jobId}`);
+
+export interface BatchListItem {
+  batch_id  : string;
+  created_at: number;
+  n         : number;
+  total_pnl : number;
+  avg_pnl   : number;
+  wins      : number;
+}
+
+/** Recent batch runs, most recent first — persisted in SQLite, survives server restarts. */
+export const fetchBatchList = (limit = 20) =>
+  get<{ success: boolean; batches: BatchListItem[] }>(`/backtest/batch/list?limit=${limit}`);
+
+export interface BatchGroupSummary {
+  symbol   : string;
+  strategy : string;
+  n        : number;
+  total_pnl: number;
+  avg_pnl  : number;
+  wins     : number;
+  best_pnl : number;
+  worst_pnl: number;
+  win_rate : number;
+}
+
+/** Grouped (symbol, strategy) aggregate results for one batch run, best total PnL first. */
+export const fetchBatchSummary = (batchId: string) =>
+  get<{ success: boolean; batch_id: string; groups: BatchGroupSummary[] }>(
+    `/backtest/batch/results?batch_id=${batchId}&summary=true`
+  );
+
+export interface BatchResultRow {
+  id           : number;
+  batch_id     : string;
+  created_at   : number;
+  symbol       : string;
+  strategy     : string;
+  expiry_date  : string;
+  strike_offset: number;
+  timeframe    : string;
+  entry_t      : number;
+  exit_t       : number;
+  exit_reason  : string;
+  pnl          : number;
+  entry_premium: number;
+  was_mock     : number;
+}
+
+/** Every individual scenario result for one batch run, ranked best PnL first. */
+export const fetchBatchResults = (batchId: string) =>
+  get<{ success: boolean; batch_id: string; results: BatchResultRow[] }>(
+    `/backtest/batch/results?batch_id=${batchId}`
+  );
+
 // ─── Greeks ──────────────────────────────────────────────────────────────────
 export const fetchGreeks = (spot: number, strike: number, expiry: number, iv: number, type: string) =>
   get<GreeksResponse>(`/greeks?spot=${spot}&strike=${strike}&expiry=${expiry}&iv=${iv}&type=${type}`);
