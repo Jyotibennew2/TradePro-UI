@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  runBatchBacktest, fetchBatchStatus, fetchBatchList, fetchBatchSummary,
-  type BatchStrategy,
+  runBatchBacktest, fetchBatchStatus, fetchBatchList, fetchBatchSummary, fetchBatchResults,
+  type BatchStrategy, type BatchResultRow,
 } from "../utils/api";
 import Card from "../components/ui/Card";
 import Loader from "../components/ui/Loader";
@@ -28,6 +28,49 @@ function fmtDate(epoch: number) {
     day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
   });
 }
+function strategyLabel(id: string) {
+  return STRATEGIES.find(s => s.id === id)?.label ?? id;
+}
+
+/** One trade's full detail: expiry, exact legs, SL/target amounts, why it exited. */
+function TradeDetailRow({ r }: { r: BatchResultRow }) {
+  const theme = useTheme();
+  return (
+    <div className="rounded-lg p-3" style={{ background: theme.bg.page, border: `1px solid ${theme.border.subtle}` }}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-sm" style={{ color: theme.text.muted }}>
+          Expiry <b style={{ color: theme.text.secondary }}>{r.expiry_date}</b> · {r.timeframe} entry
+        </div>
+        <div className="text-sm font-bold" style={{ color: r.pnl >= 0 ? theme.accent.green : theme.accent.red }}>
+          {fmtMoney(r.pnl)}
+        </div>
+      </div>
+
+      {/* Exact legs traded */}
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        {r.legs.map((leg, i) => (
+          <span key={i} className="text-sm px-2 py-1 rounded"
+            style={{
+              background: leg.action === "SELL" ? theme.accent.red + "18" : theme.accent.green + "18",
+              color     : leg.action === "SELL" ? theme.accent.red : theme.accent.green,
+              border    : `1px solid ${(leg.action === "SELL" ? theme.accent.red : theme.accent.green)}40`,
+            }}>
+            {leg.action} {leg.strike} {leg.option_type} x{leg.lots}
+          </span>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm" style={{ color: theme.text.muted }}>
+        <span>Entry: {fmtDate(r.entry_t)} @ spot {r.entry_spot.toLocaleString("en-IN")}</span>
+        <span>Exit: {fmtDate(r.exit_t)} @ spot {r.exit_spot.toLocaleString("en-IN")}</span>
+        <span>Premium collected: {r.entry_premium.toLocaleString("en-IN")}</span>
+        <span>Exit reason: <b style={{ color: theme.text.secondary }}>{r.exit_reason}</b></span>
+        <span>Stop-loss set at: <span style={{ color: theme.accent.red }}>{r.sl_amount.toLocaleString("en-IN")}</span></span>
+        <span>Target set at: <span style={{ color: theme.accent.green }}>{r.tgt_amount.toLocaleString("en-IN")}</span></span>
+      </div>
+    </div>
+  );
+}
 
 export default function BatchBacktest() {
   const theme = useTheme();
@@ -41,8 +84,9 @@ export default function BatchBacktest() {
   const [tgtPct, setTgtPct]         = useState(50);
   const [maxEntries, setMaxEntries] = useState(20);
 
-  const [activeJobId, setActiveJobId]     = useState<string | null>(null);
+  const [activeJobId, setActiveJobId]         = useState<string | null>(null);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
+  const [expandedGroup, setExpandedGroup]     = useState<{ symbol: string; strategy: string } | null>(null);
 
   const toggle = <T,>(list: T[], setList: (v: T[]) => void, val: T) =>
     setList(list.includes(val) ? list.filter(v => v !== val) : [...list, val]);
@@ -66,6 +110,7 @@ export default function BatchBacktest() {
   if (jobStatus?.status === "done" && jobStatus.result && selectedBatchId !== jobStatus.result.batch_id) {
     // Auto-select the just-finished batch's results, and refresh the history list
     setSelectedBatchId(jobStatus.result.batch_id);
+    setExpandedGroup(null);
     qc.invalidateQueries({ queryKey: ["batchList"] });
   }
 
@@ -80,6 +125,13 @@ export default function BatchBacktest() {
     queryKey: ["batchSummary", selectedBatchId],
     queryFn : () => fetchBatchSummary(selectedBatchId!),
     enabled : !!selectedBatchId,
+  });
+
+  // ─── Individual trades for the expanded group (exact strikes/legs/SL) ─────
+  const { data: detailData, isLoading: detailLoading } = useQuery({
+    queryKey: ["batchResults", selectedBatchId, expandedGroup?.symbol, expandedGroup?.strategy],
+    queryFn : () => fetchBatchResults(selectedBatchId!, expandedGroup!.symbol, expandedGroup!.strategy, 50),
+    enabled : !!selectedBatchId && !!expandedGroup,
   });
 
   const checkboxRow = <T extends string>(
@@ -172,7 +224,8 @@ export default function BatchBacktest() {
               </div>
             )}
             {(historyData?.batches ?? []).map((b) => (
-              <button key={b.batch_id} type="button" onClick={() => setSelectedBatchId(b.batch_id)}
+              <button key={b.batch_id} type="button"
+                onClick={() => { setSelectedBatchId(b.batch_id); setExpandedGroup(null); }}
                 className="w-full text-left rounded-lg p-3 transition-all"
                 style={{
                   background: selectedBatchId === b.batch_id ? theme.accent.cyan + "14" : theme.bg.surface,
@@ -206,32 +259,53 @@ export default function BatchBacktest() {
                   No results yet for this batch.
                 </div>
               )}
-              {(summaryData?.groups ?? []).map((g, i) => (
-                <div key={`${g.symbol}-${g.strategy}`} className="rounded-lg p-3"
-                  style={{
-                    background: theme.bg.surface,
-                    border    : `1px solid ${i === 0 ? theme.accent.green + "60" : theme.border.subtle}`,
-                  }}>
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="text-sm font-bold" style={{ color: theme.text.secondary }}>
-                      {i === 0 && "🏆 "}{g.symbol} · {STRATEGIES.find(s => s.id === g.strategy)?.label ?? g.strategy}
-                    </div>
-                    <div className="text-sm font-bold"
-                      style={{ color: g.total_pnl >= 0 ? theme.accent.green : theme.accent.red }}>
-                      {fmtMoney(g.total_pnl)}
-                    </div>
+              {(summaryData?.groups ?? []).map((g, i) => {
+                const isExpanded = expandedGroup?.symbol === g.symbol && expandedGroup?.strategy === g.strategy;
+                return (
+                  <div key={`${g.symbol}-${g.strategy}`}>
+                    <button type="button"
+                      onClick={() => setExpandedGroup(isExpanded ? null : { symbol: g.symbol, strategy: g.strategy })}
+                      className="w-full text-left rounded-lg p-3"
+                      style={{
+                        background: theme.bg.surface,
+                        border    : `1px solid ${isExpanded ? theme.accent.cyan + "60" : (i === 0 ? theme.accent.green + "60" : theme.border.subtle)}`,
+                      }}>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="text-sm font-bold" style={{ color: theme.text.secondary }}>
+                          {i === 0 && "🏆 "}{g.symbol} · {strategyLabel(g.strategy)}
+                        </div>
+                        <div className="text-sm font-bold"
+                          style={{ color: g.total_pnl >= 0 ? theme.accent.green : theme.accent.red }}>
+                          {fmtMoney(g.total_pnl)}
+                        </div>
+                      </div>
+                      <div className="flex gap-4 text-sm" style={{ color: theme.text.muted }}>
+                        <span>Win rate: <b style={{ color: theme.text.secondary }}>{g.win_rate}%</b></span>
+                        <span>Trades: {g.n}</span>
+                        <span>Avg: {fmtMoney(Math.round(g.avg_pnl))}</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <div className="flex gap-4 text-sm" style={{ color: theme.text.muted }}>
+                          <span>Best: <span style={{ color: theme.accent.green }}>{fmtMoney(g.best_pnl)}</span></span>
+                          <span>Worst: <span style={{ color: theme.accent.red }}>{fmtMoney(g.worst_pnl)}</span></span>
+                        </div>
+                        <span className="text-sm" style={{ color: theme.accent.cyan }}>
+                          {isExpanded ? "Hide trades ▲" : "Show trades ▼"}
+                        </span>
+                      </div>
+                    </button>
+
+                    {/* Individual trade detail: expiry, exact legs, SL/target, exit reason */}
+                    {isExpanded && (
+                      <div className="mt-2 space-y-2 pl-2">
+                        {detailLoading ? <Loader text="Loading trades..." /> : (
+                          (detailData?.results ?? []).map((r) => <TradeDetailRow key={r.id} r={r} />)
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div className="flex gap-4 text-sm" style={{ color: theme.text.muted }}>
-                    <span>Win rate: <b style={{ color: theme.text.secondary }}>{g.win_rate}%</b></span>
-                    <span>Trades: {g.n}</span>
-                    <span>Avg: {fmtMoney(Math.round(g.avg_pnl))}</span>
-                  </div>
-                  <div className="flex gap-4 text-sm mt-0.5" style={{ color: theme.text.muted }}>
-                    <span>Best: <span style={{ color: theme.accent.green }}>{fmtMoney(g.best_pnl)}</span></span>
-                    <span>Worst: <span style={{ color: theme.accent.red }}>{fmtMoney(g.worst_pnl)}</span></span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </Card>
