@@ -14,6 +14,7 @@ import Backtest     from "./pages/Backtest";
 import AIAssistant from "./pages/AIAssistant";
 import Workspace  from "./pages/Workspace";
 import Screener2 from "./pages/Screener";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { useTheme } from "./store/themeStore";
 
 const qc = new QueryClient({
@@ -53,7 +54,7 @@ export default function App() {
                 <Route path="/paper"    element={<PaperTrade />} />
                 <Route path="/portfolio"element={<Portfolio  />} />
                 <Route path="/settings"   element={<Settings   />} />
-                <Route path="/simulator" element={<Simulator  />} />
+                <Route path="/simulator" element={<ErrorBoundary><Simulator /></ErrorBoundary>} />
                 <Route path="/backtest"  element={<Backtest   />} />
                 <Route path="/ai"        element={<AIAssistant />} />
                 <Route path="/workspace" element={<Workspace  />} />
