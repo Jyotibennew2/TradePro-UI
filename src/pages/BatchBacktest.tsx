@@ -32,9 +32,17 @@ function strategyLabel(id: string) {
   return STRATEGIES.find(s => s.id === id)?.label ?? id;
 }
 
-/** One trade's full detail: expiry, exact legs, SL/target amounts, why it exited. */
+/**
+ * One trade's full detail: expiry, exact legs, SL/target amounts, why it
+ * exited. Guards every field defensively - batch runs from before this
+ * detail logging was added won't have legs/sl_amount/spot saved, so this
+ * shows a fallback note instead of crashing on those older rows.
+ */
 function TradeDetailRow({ r }: { r: BatchResultRow }) {
   const theme = useTheme();
+  const legs = r.legs ?? [];
+  const hasDetail = legs.length > 0;
+
   return (
     <div className="rounded-lg p-3" style={{ background: theme.bg.page, border: `1px solid ${theme.border.subtle}` }}>
       <div className="flex items-center justify-between mb-2">
@@ -46,27 +54,35 @@ function TradeDetailRow({ r }: { r: BatchResultRow }) {
         </div>
       </div>
 
+      {!hasDetail && (
+        <div className="text-sm mb-2 italic" style={{ color: theme.text.muted }}>
+          This trade ran before detailed logging (exact strikes/SL) was added — re-run a batch to see full detail.
+        </div>
+      )}
+
       {/* Exact legs traded */}
-      <div className="flex flex-wrap gap-1.5 mb-2">
-        {r.legs.map((leg, i) => (
-          <span key={i} className="text-sm px-2 py-1 rounded"
-            style={{
-              background: leg.action === "SELL" ? theme.accent.red + "18" : theme.accent.green + "18",
-              color     : leg.action === "SELL" ? theme.accent.red : theme.accent.green,
-              border    : `1px solid ${(leg.action === "SELL" ? theme.accent.red : theme.accent.green)}40`,
-            }}>
-            {leg.action} {leg.strike} {leg.option_type} x{leg.lots}
-          </span>
-        ))}
-      </div>
+      {hasDetail && (
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {legs.map((leg, i) => (
+            <span key={i} className="text-sm px-2 py-1 rounded"
+              style={{
+                background: leg.action === "SELL" ? theme.accent.red + "18" : theme.accent.green + "18",
+                color     : leg.action === "SELL" ? theme.accent.red : theme.accent.green,
+                border    : `1px solid ${(leg.action === "SELL" ? theme.accent.red : theme.accent.green)}40`,
+              }}>
+              {leg.action} {leg.strike} {leg.option_type} x{leg.lots}
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm" style={{ color: theme.text.muted }}>
-        <span>Entry: {fmtDate(r.entry_t)} @ spot {r.entry_spot.toLocaleString("en-IN")}</span>
-        <span>Exit: {fmtDate(r.exit_t)} @ spot {r.exit_spot.toLocaleString("en-IN")}</span>
-        <span>Premium collected: {r.entry_premium.toLocaleString("en-IN")}</span>
+        <span>Entry: {fmtDate(r.entry_t)}{r.entry_spot != null ? ` @ spot ${r.entry_spot.toLocaleString("en-IN")}` : ""}</span>
+        <span>Exit: {fmtDate(r.exit_t)}{r.exit_spot != null ? ` @ spot ${r.exit_spot.toLocaleString("en-IN")}` : ""}</span>
+        <span>Premium collected: {(r.entry_premium ?? 0).toLocaleString("en-IN")}</span>
         <span>Exit reason: <b style={{ color: theme.text.secondary }}>{r.exit_reason}</b></span>
-        <span>Stop-loss set at: <span style={{ color: theme.accent.red }}>{r.sl_amount.toLocaleString("en-IN")}</span></span>
-        <span>Target set at: <span style={{ color: theme.accent.green }}>{r.tgt_amount.toLocaleString("en-IN")}</span></span>
+        {r.sl_amount != null && <span>Stop-loss set at: <span style={{ color: theme.accent.red }}>{r.sl_amount.toLocaleString("en-IN")}</span></span>}
+        {r.tgt_amount != null && <span>Target set at: <span style={{ color: theme.accent.green }}>{r.tgt_amount.toLocaleString("en-IN")}</span></span>}
       </div>
     </div>
   );
