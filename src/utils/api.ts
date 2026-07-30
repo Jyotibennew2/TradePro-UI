@@ -27,6 +27,12 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json();
 }
 
+async function del<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  return res.json();
+}
+
 export type Timeframe = "5m" | "15m" | "30m" | "1h" | "2h" | "1d";
 
 // ─── Health ──────────────────────────────────────────────────────────────────
@@ -290,6 +296,14 @@ export interface BatchListItem {
 /** Recent batch runs, most recent first — persisted in SQLite, survives server restarts. */
 export const fetchBatchList = (limit = 20) =>
   get<{ success: boolean; batches: BatchListItem[] }>(`/backtest/batch/list?limit=${limit}`);
+
+/**
+ * Permanently delete every result belonging to one batch run. Cannot be
+ * undone - used by the "delete" button in the history list so junk/test
+ * runs can be cleared while keeping the useful ones.
+ */
+export const deleteBatch = (batchId: string) =>
+  del<{ success: boolean; batch_id: string; deleted_rows: number }>(`/backtest/batch/${batchId}`);
 
 export interface BatchGroupSummary {
   symbol   : string;
