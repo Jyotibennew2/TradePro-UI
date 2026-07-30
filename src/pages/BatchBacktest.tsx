@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { Trash2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  runBatchBacktest, fetchBatchStatus, fetchBatchList, fetchBatchSummary, fetchBatchResults,
+  runBatchBacktest, fetchBatchStatus, fetchBatchList, fetchBatchSummary, fetchBatchResults, deleteBatch,
   type BatchStrategy, type BatchResultRow,
 } from "../utils/api";
 import Card from "../components/ui/Card";
@@ -103,6 +104,7 @@ export default function BatchBacktest() {
   const [activeJobId, setActiveJobId]         = useState<string | null>(null);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [expandedGroup, setExpandedGroup]     = useState<{ symbol: string; strategy: string } | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const toggle = <T,>(list: T[], setList: (v: T[]) => void, val: T) =>
     setList(list.includes(val) ? list.filter(v => v !== val) : [...list, val]);
@@ -134,6 +136,19 @@ export default function BatchBacktest() {
   const { data: historyData, isLoading: historyLoading } = useQuery({
     queryKey: ["batchList"],
     queryFn : () => fetchBatchList(20),
+  });
+
+  // ─── Delete mutation ──────────────────────────────────────────────────────
+  const deleteMutation = useMutation({
+    mutationFn: (batchId: string) => deleteBatch(batchId),
+    onSuccess: (_data, batchId) => {
+      qc.invalidateQueries({ queryKey: ["batchList"] });
+      if (selectedBatchId === batchId) {
+        setSelectedBatchId(null);
+        setExpandedGroup(null);
+      }
+      setPendingDeleteId(null);
+    },
   });
 
   // ─── Selected batch's grouped results ─────────────────────────────────────
@@ -240,26 +255,49 @@ export default function BatchBacktest() {
               </div>
             )}
             {(historyData?.batches ?? []).map((b) => (
-              <button key={b.batch_id} type="button"
-                onClick={() => { setSelectedBatchId(b.batch_id); setExpandedGroup(null); }}
-                className="w-full text-left rounded-lg p-3 transition-all"
-                style={{
-                  background: selectedBatchId === b.batch_id ? theme.accent.cyan + "14" : theme.bg.surface,
-                  border    : `1px solid ${selectedBatchId === b.batch_id ? theme.accent.cyan + "60" : theme.border.subtle}`,
-                }}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-bold" style={{ color: theme.text.secondary }}>{b.batch_id}</div>
-                    <div className="text-sm mt-0.5" style={{ color: theme.text.muted }}>
-                      {fmtDate(b.created_at)} • {b.n} scenarios • {Math.round((b.wins / b.n) * 100)}% win rate
+              <div key={b.batch_id} className="flex items-stretch gap-2">
+                <button type="button"
+                  onClick={() => { setSelectedBatchId(b.batch_id); setExpandedGroup(null); }}
+                  className="flex-1 text-left rounded-lg p-3 transition-all"
+                  style={{
+                    background: selectedBatchId === b.batch_id ? theme.accent.cyan + "14" : theme.bg.surface,
+                    border    : `1px solid ${selectedBatchId === b.batch_id ? theme.accent.cyan + "60" : theme.border.subtle}`,
+                  }}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-bold" style={{ color: theme.text.secondary }}>{b.batch_id}</div>
+                      <div className="text-sm mt-0.5" style={{ color: theme.text.muted }}>
+                        {fmtDate(b.created_at)} • {b.n} scenarios • {Math.round((b.wins / b.n) * 100)}% win rate
+                      </div>
+                    </div>
+                    <div className="text-sm font-bold"
+                      style={{ color: b.total_pnl >= 0 ? theme.accent.green : theme.accent.red }}>
+                      {fmtMoney(b.total_pnl)}
                     </div>
                   </div>
-                  <div className="text-sm font-bold"
-                    style={{ color: b.total_pnl >= 0 ? theme.accent.green : theme.accent.red }}>
-                    {fmtMoney(b.total_pnl)}
-                  </div>
-                </div>
-              </button>
+                </button>
+
+                {/* Delete: tap once to arm ("Sure?"), tap again to confirm - no
+                    accidental deletes, but no separate modal dialog needed either */}
+                <button type="button"
+                  onClick={() => {
+                    if (pendingDeleteId === b.batch_id) {
+                      deleteMutation.mutate(b.batch_id);
+                    } else {
+                      setPendingDeleteId(b.batch_id);
+                    }
+                  }}
+                  disabled={deleteMutation.isPending && deleteMutation.variables === b.batch_id}
+                  className="px-3 rounded-lg flex items-center justify-center text-sm font-medium shrink-0"
+                  style={{
+                    background: pendingDeleteId === b.batch_id ? theme.accent.red : theme.bg.surface,
+                    color     : pendingDeleteId === b.batch_id ? "#fff" : theme.accent.red,
+                    border    : `1px solid ${theme.accent.red}50`,
+                    minWidth  : pendingDeleteId === b.batch_id ? 76 : 44,
+                  }}>
+                  {pendingDeleteId === b.batch_id ? "Sure?" : <Trash2 size={16} />}
+                </button>
+              </div>
             ))}
           </div>
         )}
