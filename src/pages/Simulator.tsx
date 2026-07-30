@@ -21,6 +21,11 @@
  * per-leg Expiry Date dropdown (handleChangeLegExpiry) also fetches the
  * real historical entry price for a leg's newly picked expiry, using the
  * existing fetchArchivedChain API.
+ *
+ * Header also carries a small visible build tag ("build-posbook-guards-1")
+ * purely as a deploy-verification aid — if you don't see this tag change
+ * after a deploy, the browser/dev server is serving a stale build, not a
+ * code bug.
  */
 
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
@@ -438,6 +443,7 @@ export default function Simulator() {
         <div className="flex items-center gap-2 shrink-0">
           <Zap size={18} color={theme.accent.cyan} />
           <span className="font-black text-sm" style={{ color: theme.accent.cyan }}>TradePro</span>
+          <span style={{ fontSize: 8, color: theme.text.faint }}>build-posbook-guards-1</span>
         </div>
 
         <div className="flex items-center gap-4 flex-wrap">
