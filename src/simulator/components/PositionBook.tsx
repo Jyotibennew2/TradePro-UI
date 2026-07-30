@@ -2,27 +2,26 @@
  * TradePro Simulator - Position Book (floating panel, fully editable)
  *
  * New in this pass:
- *   - Expiry column is now a searchable Expiry Date dropdown (real archive
- *     dates) instead of a Weekly/Monthly toggle. Picking a new expiry also
- *     loads that leg's real historical entry price for the current replay
- *     position (see onChangeLegExpiry in Simulator.tsx).
- *   - LTP + Greeks now use the real archived snapshot (liveOverrides) when
- *     the leg's own expiry matches the currently browsed Historical Option
- *     Chain expiry — shown with a small LIVE badge — falling back to the
- *     theoretical bsGreeks price otherwise, exactly as before.
  *   - A checkbox per leg (checked by default). Unticking a leg excludes it
  *     from Strategy/Payoff/Greeks calculations elsewhere on the page (via
  *     the excludedIds set lifted up to Simulator.tsx) WITHOUT removing it
- *     from this Position Book — it just stops counting.
- *   - Instrument, Lots, SL and Target are searchable dropdowns
- *     (SearchableSelect).
- *   - Bottom summary shows Total Delta, Total Theta, and Strategy P&L.
+ *     from this Position Book — it just stops counting. This only changes
+ *     which legs get passed into the existing calculatePayoff /
+ *     calculatePortfolioMargin / bsGreeks calls — those functions
+ *     themselves are untouched.
+ *   - Instrument, Lots, SL and Target are now searchable dropdowns
+ *     (SearchableSelect) instead of plain inputs, per the new spec.
+ *   - Bottom summary now also shows Total Delta, Total Theta, and
+ *     Strategy P&L (same MTM sum as before, relabeled).
+ *   - Defensive guards: every prop has a safe fallback (safeLiveOverrides,
+ *     safeExpiryOptions, safeExcludedIds, safeInstrumentOptions), and every
+ *     leg is validated (has id/contract/strike/optionType/entryPrice/lots)
+ *     via validLegs before anything maps or reads off it. A malformed leg
+ *     is skipped instead of crashing the whole panel.
  *
- * Everything still uses the exact same update path as before
+ * Everything below still uses the exact same update path as before
  * (onUpdate → updateLeg, onExit → removeLeg, onAddLeg → addCustomLeg) —
- * no calculation logic was added or changed; liveOverrides/expiryOptions
- * are computed in Simulator.tsx from the existing archived-chain API and
- * passed in as plain data.
+ * no calculation logic was added or changed.
  */
 import { useState, useRef, useCallback } from "react";
 import { ChevronDown, ChevronUp, X, GripHorizontal, Briefcase, Plus, Minus } from "lucide-react";
@@ -70,6 +69,28 @@ export default function PositionBook({
   const [slTgt, setSlTgt] = useState<Record<string, { sl: string; target: string; mode: "pt" | "pct" }>>({});
   const dragRef = useRef<{ startY: number; startH: number } | null>(null);
 
+  // Defensive defaults — if a caller ever renders this without one of these
+  // (or a future edit accidentally drops a prop), fall back to safe empty
+  // values instead of crashing on the very first read.
+  const safeLiveOverrides = liveOverrides ?? {};
+  const safeExpiryOptions = expiryOptions ?? [];
+  const safeExcludedIds = excludedIds ?? new Set<string>();
+  const safeInstrumentOptions = instrumentOptions ?? [];
+
+  // Validate every leg before it's ever mapped/rendered — a leg missing its
+  // contract (symbol/strike/optionType) or id can never come from
+  // makeOptionLeg (used by every leg-creating path in this app), but this
+  // guard means a malformed leg is silently skipped instead of crashing
+  // the whole Position Book.
+  const validLegs = (legs ?? []).filter(
+    (l): l is OptionLeg =>
+      !!l && !!l.id && !!l.contract &&
+      typeof l.contract.strike === "number" &&
+      (l.contract.optionType === "CE" || l.contract.optionType === "PE") &&
+      typeof l.entryPrice === "number" &&
+      typeof l.lots === "number"
+  );
+
   const getSlTgt = (id: string) => slTgt[id] ?? { sl: "0", target: "0", mode: "pt" as const };
   const updateSlTgt = (id: string, patch: Partial<{ sl: string; target: string; mode: "pt" | "pct" }>) => {
     setSlTgt(m => ({ ...m, [id]: { ...getSlTgt(id), ...patch } }));
@@ -86,14 +107,14 @@ export default function PositionBook({
   }, []);
   const onDragEnd = useCallback(() => { dragRef.current = null; }, []);
 
-  const rows = legs.map(leg => {
-    const ov = liveOverrides[leg.id];
+  const rows = validLegs.map(leg => {
+    const ov = safeLiveOverrides[leg.id];
     const g = bsGreeks({
       spot, strike: leg.contract.strike, timeToExpiry: T,
-      riskFreeRate, volatility: (ov?.iv ?? leg.iv) / 100, optionType: leg.contract.optionType,
+      riskFreeRate, volatility: (ov?.iv ?? leg.iv ?? 15) / 100, optionType: leg.contract.optionType,
     });
     const ltp = ov?.ltp ?? g.price;
-    const qty = leg.lots * leg.contract.lotSize;
+    const qty = leg.lots * (leg.contract.lotSize ?? 1);
     const sign = leg.action === "BUY" ? 1 : -1;
     const mtm = (ltp - leg.entryPrice) * qty * sign;
     return {
@@ -109,7 +130,7 @@ export default function PositionBook({
   const totalTheta = rows.reduce((s, r) => s + r.thetaPos, 0);
 
   const instrOptions = (optType: "CE" | "PE") =>
-    instrumentOptions.map(o => ({ value: `${o.strike}|${optType}`, label: `${o.strike} ${optType}` }));
+    safeInstrumentOptions.map(o => ({ value: `${o.strike}|${optType}`, label: `${o.strike} ${optType}` }));
 
   if (collapsed) {
     return (
@@ -119,8 +140,8 @@ export default function PositionBook({
         style={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}`, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}
       >
         <Briefcase size={15} color={theme.accent.cyan} />
-        <span className="text-sm font-bold" style={{ color: theme.text.secondary }}>Position Book ({legs.length})</span>
-        {legs.length > 0 && (
+        <span className="text-sm font-bold" style={{ color: theme.text.secondary }}>Position Book ({validLegs.length})</span>
+        {validLegs.length > 0 && (
           <span className="text-sm font-black" style={{ color: totalMtm >= 0 ? theme.accent.green : theme.accent.red }}>
             {totalMtm >= 0 ? "+" : ""}₹{Math.round(totalMtm).toLocaleString("en-IN")}
           </span>
@@ -190,7 +211,7 @@ export default function PositionBook({
                 const st = getSlTgt(leg.id);
                 const isBuy = leg.action === "BUY";
                 const isCE = leg.contract.optionType === "CE";
-                const active = !excludedIds.has(leg.id);
+                const active = !safeExcludedIds.has(leg.id);
                 const slOpts = (st.mode === "pt" ? SL_TGT_POINTS : SL_TGT_PCT).map(n => ({ value: String(n), label: st.mode === "pt" ? `${n} pt` : `${n}%` }));
 
                 return (
@@ -233,7 +254,7 @@ export default function PositionBook({
                         value={leg.contract.expiry || ""}
                         onSelect={(v) => onChangeLegExpiry(leg, v)}
                         placeholder="Expiry"
-                        options={expiryOptions.map(e => ({ value: e, label: expiryLabel(e) }))}
+                        options={safeExpiryOptions.map(e => ({ value: e, label: expiryLabel ? expiryLabel(e) : e }))}
                       />
                     </td>
 
