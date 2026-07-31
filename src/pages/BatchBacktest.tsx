@@ -105,6 +105,8 @@ export default function BatchBacktest() {
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [expandedGroup, setExpandedGroup]     = useState<{ symbol: string; strategy: string } | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [pendingDeleteGroup, setPendingDeleteGroup] = useState<{ symbol: string; strategy: string } | null>(null);
+  const [deleteErrorMsg, setDeleteErrorMsg]   = useState<string | null>(null);
 
   const toggle = <T,>(list: T[], setList: (v: T[]) => void, val: T) =>
     setList(list.includes(val) ? list.filter(v => v !== val) : [...list, val]);
@@ -138,7 +140,7 @@ export default function BatchBacktest() {
     queryFn : () => fetchBatchList(20),
   });
 
-  // ─── Delete mutation ──────────────────────────────────────────────────────
+  // ─── Delete mutations (whole batch, and single symbol+strategy group) ─────
   const deleteMutation = useMutation({
     mutationFn: (batchId: string) => deleteBatch(batchId),
     onSuccess: (_data, batchId) => {
@@ -148,7 +150,24 @@ export default function BatchBacktest() {
         setExpandedGroup(null);
       }
       setPendingDeleteId(null);
+      setDeleteErrorMsg(null);
     },
+    onError: (err: Error) => setDeleteErrorMsg(err.message),
+  });
+
+  const deleteGroupMutation = useMutation({
+    mutationFn: ({ symbol, strategy }: { symbol: string; strategy: string }) =>
+      deleteBatch(selectedBatchId!, symbol, strategy),
+    onSuccess: (_data, { symbol, strategy }) => {
+      qc.invalidateQueries({ queryKey: ["batchSummary", selectedBatchId] });
+      qc.invalidateQueries({ queryKey: ["batchList"] });
+      if (expandedGroup?.symbol === symbol && expandedGroup?.strategy === strategy) {
+        setExpandedGroup(null);
+      }
+      setPendingDeleteGroup(null);
+      setDeleteErrorMsg(null);
+    },
+    onError: (err: Error) => setDeleteErrorMsg(err.message),
   });
 
   // ─── Selected batch's grouped results ─────────────────────────────────────
@@ -245,6 +264,11 @@ export default function BatchBacktest() {
         </div>
       </Card>
 
+      {/* Delete errors surface here so a failed delete is never silent */}
+      {deleteErrorMsg && (
+        <ErrorBox message={`Delete failed: ${deleteErrorMsg}`} />
+      )}
+
       {/* History of past batches */}
       <Card title="Past Batches (saved — always here to revisit)">
         {historyLoading ? <Loader text="Loading history..." /> : (
@@ -281,6 +305,7 @@ export default function BatchBacktest() {
                     accidental deletes, but no separate modal dialog needed either */}
                 <button type="button"
                   onClick={() => {
+                    setDeleteErrorMsg(null);
                     if (pendingDeleteId === b.batch_id) {
                       deleteMutation.mutate(b.batch_id);
                     } else {
@@ -295,7 +320,9 @@ export default function BatchBacktest() {
                     border    : `1px solid ${theme.accent.red}50`,
                     minWidth  : pendingDeleteId === b.batch_id ? 76 : 44,
                   }}>
-                  {pendingDeleteId === b.batch_id ? "Sure?" : <Trash2 size={16} />}
+                  {deleteMutation.isPending && deleteMutation.variables === b.batch_id
+                    ? "…"
+                    : pendingDeleteId === b.batch_id ? "Sure?" : <Trash2 size={16} />}
                 </button>
               </div>
             ))}
@@ -315,39 +342,65 @@ export default function BatchBacktest() {
               )}
               {(summaryData?.groups ?? []).map((g, i) => {
                 const isExpanded = expandedGroup?.symbol === g.symbol && expandedGroup?.strategy === g.strategy;
+                const isPendingDelete = pendingDeleteGroup?.symbol === g.symbol && pendingDeleteGroup?.strategy === g.strategy;
+                const isDeletingThis = deleteGroupMutation.isPending
+                  && deleteGroupMutation.variables?.symbol === g.symbol
+                  && deleteGroupMutation.variables?.strategy === g.strategy;
                 return (
                   <div key={`${g.symbol}-${g.strategy}`}>
-                    <button type="button"
-                      onClick={() => setExpandedGroup(isExpanded ? null : { symbol: g.symbol, strategy: g.strategy })}
-                      className="w-full text-left rounded-lg p-3"
+                    <div className="rounded-lg p-3"
                       style={{
                         background: theme.bg.surface,
                         border    : `1px solid ${isExpanded ? theme.accent.cyan + "60" : (i === 0 ? theme.accent.green + "60" : theme.border.subtle)}`,
                       }}>
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="text-sm font-bold" style={{ color: theme.text.secondary }}>
-                          {i === 0 && "🏆 "}{g.symbol} · {strategyLabel(g.strategy)}
+                      <button type="button"
+                        onClick={() => setExpandedGroup(isExpanded ? null : { symbol: g.symbol, strategy: g.strategy })}
+                        className="w-full text-left">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="text-sm font-bold" style={{ color: theme.text.secondary }}>
+                            {i === 0 && "🏆 "}{g.symbol} · {strategyLabel(g.strategy)}
+                          </div>
+                          <div className="text-sm font-bold"
+                            style={{ color: g.total_pnl >= 0 ? theme.accent.green : theme.accent.red }}>
+                            {fmtMoney(g.total_pnl)}
+                          </div>
                         </div>
-                        <div className="text-sm font-bold"
-                          style={{ color: g.total_pnl >= 0 ? theme.accent.green : theme.accent.red }}>
-                          {fmtMoney(g.total_pnl)}
-                        </div>
-                      </div>
-                      <div className="flex gap-4 text-sm" style={{ color: theme.text.muted }}>
-                        <span>Win rate: <b style={{ color: theme.text.secondary }}>{g.win_rate}%</b></span>
-                        <span>Trades: {g.n}</span>
-                        <span>Avg: {fmtMoney(Math.round(g.avg_pnl))}</span>
-                      </div>
-                      <div className="flex items-center justify-between mt-0.5">
                         <div className="flex gap-4 text-sm" style={{ color: theme.text.muted }}>
+                          <span>Win rate: <b style={{ color: theme.text.secondary }}>{g.win_rate}%</b></span>
+                          <span>Trades: {g.n}</span>
+                          <span>Avg: {fmtMoney(Math.round(g.avg_pnl))}</span>
+                        </div>
+                        <div className="flex gap-4 text-sm mt-0.5" style={{ color: theme.text.muted }}>
                           <span>Best: <span style={{ color: theme.accent.green }}>{fmtMoney(g.best_pnl)}</span></span>
                           <span>Worst: <span style={{ color: theme.accent.red }}>{fmtMoney(g.worst_pnl)}</span></span>
                         </div>
-                        <span className="text-sm" style={{ color: theme.accent.cyan }}>
+                      </button>
+
+                      {/* Per-group actions: expand / delete just this strategy's results */}
+                      <div className="flex items-center justify-between mt-2 pt-2" style={{ borderTop: `1px solid ${theme.border.subtle}` }}>
+                        <button type="button" onClick={() => setExpandedGroup(isExpanded ? null : { symbol: g.symbol, strategy: g.strategy })}
+                          className="text-sm" style={{ color: theme.accent.cyan }}>
                           {isExpanded ? "Hide trades ▲" : "Show trades ▼"}
-                        </span>
+                        </button>
+                        <button type="button"
+                          onClick={() => {
+                            setDeleteErrorMsg(null);
+                            if (isPendingDelete) {
+                              deleteGroupMutation.mutate({ symbol: g.symbol, strategy: g.strategy });
+                            } else {
+                              setPendingDeleteGroup({ symbol: g.symbol, strategy: g.strategy });
+                            }
+                          }}
+                          disabled={isDeletingThis}
+                          className="flex items-center gap-1 text-sm px-2 py-1 rounded"
+                          style={{
+                            background: isPendingDelete ? theme.accent.red : "transparent",
+                            color     : isPendingDelete ? "#fff" : theme.accent.red,
+                          }}>
+                          {isDeletingThis ? "Deleting…" : isPendingDelete ? "Sure? tap again" : (<><Trash2 size={13} /> Delete this strategy</>)}
+                        </button>
                       </div>
-                    </button>
+                    </div>
 
                     {/* Individual trade detail: expiry, exact legs, SL/target, exit reason */}
                     {isExpanded && (
