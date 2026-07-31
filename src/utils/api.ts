@@ -27,9 +27,24 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json();
 }
 
+/**
+ * Tries to surface the backend's actual error message (e.g. "No matching
+ * rows found for batch ...") instead of a generic "HTTP 404" - important
+ * for delete/mutation calls where a silent failure otherwise looks like
+ * nothing happened at all.
+ */
 async function del<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { method: "DELETE" });
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  if (!res.ok) {
+    let message = `HTTP ${res.status}: ${res.statusText}`;
+    try {
+      const body = await res.json();
+      if (body?.error) message = body.error;
+    } catch {
+      // response wasn't JSON - keep the generic message
+    }
+    throw new Error(message);
+  }
   return res.json();
 }
 
@@ -298,12 +313,22 @@ export const fetchBatchList = (limit = 20) =>
   get<{ success: boolean; batches: BatchListItem[] }>(`/backtest/batch/list?limit=${limit}`);
 
 /**
- * Permanently delete every result belonging to one batch run. Cannot be
- * undone - used by the "delete" button in the history list so junk/test
- * runs can be cleared while keeping the useful ones.
+ * Permanently delete results for one batch run. Cannot be undone.
+ *
+ * - deleteBatch(batchId): removes the ENTIRE batch (every symbol/strategy).
+ * - deleteBatch(batchId, symbol, strategy): removes just that one group
+ *   within the batch (e.g. drop "straddle" but keep "theta_harvest"),
+ *   leaving the rest of the batch intact.
  */
-export const deleteBatch = (batchId: string) =>
-  del<{ success: boolean; batch_id: string; deleted_rows: number }>(`/backtest/batch/${batchId}`);
+export const deleteBatch = (batchId: string, symbol?: string, strategy?: string) => {
+  const qs = [
+    symbol   ? `symbol=${symbol}`     : null,
+    strategy ? `strategy=${strategy}` : null,
+  ].filter(Boolean).join("&");
+  return del<{ success: boolean; batch_id: string; symbol: string | null; strategy: string | null; deleted_rows: number }>(
+    `/backtest/batch/${batchId}${qs ? `?${qs}` : ""}`
+  );
+};
 
 export interface BatchGroupSummary {
   symbol   : string;
