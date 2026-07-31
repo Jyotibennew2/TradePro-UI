@@ -4,26 +4,28 @@
  * LAYOUT ONLY changed from the previous collapsible-sections version:
  *   Fixed header -> Replay Control Bar -> Walk-Forward Bar ->
  *   [ Left 35%: Option Chain + Strategy Builder | Right 65%: Payoff +
- *   Analytics + Tabbed panel ] -> Fixed bottom action bar -> floating
- *   Position Book.
+ *   Analytics + Tabbed panel ] -> Fixed bottom action bar.
  *
  * All calculation/business logic below (calculate, portfolioGreeks, margin,
  * scenarioMatrix, adjustments, worstLevel, handleRollStrike, handleTemplate,
  * addCustomLeg, drag-reorder, handleSave/Export/Import/Load/Duplicate) is
  * the exact same logic that was already here — none of it was changed.
  *
- * New in this pass: excludedLegIds/activeLegs. Position Book now has a
- * per-leg checkbox; unticking a leg removes it from activeLegs, which is
- * what feeds calculate/portfolioGreeks/margin/scenarioMatrix/pop/
- * adjustments below — the underlying calculatePayoff/calculatePortfolioMargin/
- * bsGreeks functions themselves are untouched, only which legs get passed
- * into them changed.
+ * New in this pass: Simulator <-> Historical Option Chain sync. Whenever
+ * the chain has a snapshot loaded for the same underlying, the replay
+ * position (spot + each matching leg's real archived LTP/IV) feeds
+ * Payoff/Margin/Greeks/Scenario/POP/Adjustments on every step — via
+ * liveSpot/liveOverrides/syncedActiveLegs, which only change WHAT data is
+ * passed into the existing calculatePayoff/calculatePortfolioMargin/
+ * bsGreeks functions, never those functions themselves. Position Book's
+ * per-leg Expiry Date dropdown (handleChangeLegExpiry) also fetches the
+ * real historical entry price for a leg's newly picked expiry, using the
+ * existing fetchArchivedChain API.
  *
- * BUGFIX: activeLegs is now memoized (useMemo) instead of a plain
- * `.filter()` on every render. Without memoization it got a new array
- * identity every render, which made calculate()'s useCallback (and the
- * effect that calls it) re-fire every render — an infinite render loop
- * that froze the page to a blank black screen shortly after load.
+ * Header also carries a small visible build tag ("build-posbook-guards-1")
+ * purely as a deploy-verification aid — if you don't see this tag change
+ * after a deploy, the browser/dev server is serving a stale build, not a
+ * code bug.
  */
 
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
@@ -43,8 +45,9 @@ import type { PortfolioGreeks } from "../simulator/models/Greeks";
 import type { BuiltStrategy } from "../simulator/models/Strategy";
 import type { OptionLeg } from "../simulator/models/Option";
 import { STRIKE_STEPS } from "../simulator/models/Option";
-import { placePaperOrder } from "../utils/api";
+import { placePaperOrder, fetchArchivedChain } from "../utils/api";
 import { probabilityOfProfit } from "../simulator/pricing/ProbabilityEngine";
+import { fmtDateLabel } from "../simulator/hooks/useHistoricalChain";
 
 import StrategyTemplates from "../simulator/components/StrategyTemplates";
 import LegRow from "../simulator/components/LegRow";
@@ -92,7 +95,7 @@ export default function Simulator() {
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const bornAt = useRef(new Date()).current;
 
-  const effectiveSpot = spot || (underlying === "NIFTY" ? nifty : bankNifty) || 24300;
+  const manualSpot = spot || (underlying === "NIFTY" ? nifty : bankNifty) || 24300;
   // Legs with their Position Book checkbox ticked — only these feed the
   // Strategy/Payoff/Greeks calculations below. An unticked leg stays
   // visible everywhere else, it just stops counting here. Memoized so this
@@ -103,6 +106,50 @@ export default function Simulator() {
     () => legs.filter(l => !excludedLegIds.has(l.id)),
     [legs, excludedLegIds]
   );
+
+  // ─── Historical chain + walk-forward (shared across replay/WF bars + panel) ─
+  const chain = useHistoricalChain();
+
+  // Live spot: while the Historical Option Chain has a snapshot loaded for
+  // this same underlying, every replay step drives the spot used in all
+  // calculations below instead of the manual Spot Price field — this is
+  // the "synchronize with replay" behavior. If the chain is on a different
+  // symbol, or nothing is loaded yet, the manual/live-market spot is used
+  // exactly as before.
+  const liveSpot = (chain.chainMeta && chain.symbol === underlying) ? chain.chainMeta.spot : null;
+  const effectiveSpot = liveSpot ?? manualSpot;
+
+  // Live per-leg LTP + IV from the real archived snapshot at the current
+  // replay position — only for legs whose own expiry matches the expiry
+  // currently browsed in the Historical Option Chain (that's the only
+  // expiry whose data is loaded client-side at any moment).
+  const liveOverrides = useMemo(() => {
+    const map: Record<string, { ltp: number; iv: number }> = {};
+    if (chain.chainData && chain.expiry) {
+      for (const l of legs) {
+        if (l.contract.symbol !== chain.symbol || l.contract.expiry !== chain.expiry) continue;
+        const row = chain.chainData.find(r => r.strike === l.contract.strike);
+        if (!row) continue;
+        const ltp = l.contract.optionType === "CE" ? row.ce_ltp : row.pe_ltp;
+        const ivF = l.contract.optionType === "CE" ? row.ce_iv : row.pe_iv;
+        if (ltp != null) map[l.id] = { ltp, iv: ivF ?? l.iv };
+      }
+    }
+    return map;
+  }, [legs, chain.chainData, chain.expiry, chain.symbol]);
+
+  // The leg set actually fed into Payoff/Margin/Greeks/Scenario/POP/
+  // Adjustments below: activeLegs (ticked in Position Book) with IV
+  // replaced by the live archived IV where available. entryPrice (cost
+  // basis) is never touched — only the live mark inputs are synced.
+  const syncedActiveLegs = useMemo(
+    () => activeLegs.map(l => {
+      const ov = liveOverrides[l.id];
+      return ov ? { ...l, iv: ov.iv } : l;
+    }),
+    [activeLegs, liveOverrides]
+  );
+
   const T = daysToYears(daysToExpiry);
   const r = riskFreeRate / 100;
   const sigmaBase = iv / 100;
@@ -111,12 +158,12 @@ export default function Simulator() {
 
   // ─── Calculate ────────────────────────────────────────────────────────────────────────────────
   const calculate = useCallback(() => {
-    if (!activeLegs.length) { setPayoff(null); return; }
+    if (!syncedActiveLegs.length) { setPayoff(null); return; }
     setIsCalculating(true);
     try {
       const spots = spotRange(effectiveSpot, 0.10, 80);
       const result = calculatePayoff({
-        legs: activeLegs,
+        legs: syncedActiveLegs,
         spotRange: { min: spots[0], max: spots[spots.length - 1], steps: 80 },
         daysToExpiry: 0,
         riskFreeRate: r,
@@ -126,15 +173,15 @@ export default function Simulator() {
     } finally {
       setIsCalculating(false);
     }
-  }, [activeLegs, effectiveSpot, daysToExpiry, r]);
+  }, [syncedActiveLegs, effectiveSpot, daysToExpiry, r]);
 
-  // Auto-calculate payoff when legs (or their ticked state) change
+  // Auto-calculate payoff when legs (or their ticked/live-synced state) change
   useEffect(() => {
     calculate();
-  }, [activeLegs, calculate]);
+  }, [syncedActiveLegs, calculate]);
 
   // ─── Portfolio Greeks ──────────────────────────────────────────────────────────────
-  const portfolioGreeks: PortfolioGreeks = activeLegs.reduce(
+  const portfolioGreeks: PortfolioGreeks = syncedActiveLegs.reduce(
     (acc, leg) => {
       const g = bsGreeks({
         spot: effectiveSpot,
@@ -159,20 +206,20 @@ export default function Simulator() {
   );
 
   // ─── Margin ─────────────────────────────────────────────────────────────────────────────
-  const margin = activeLegs.length ? calculatePortfolioMargin(activeLegs, effectiveSpot) : null;
+  const margin = syncedActiveLegs.length ? calculatePortfolioMargin(syncedActiveLegs, effectiveSpot) : null;
 
   // ─── Scenario matrix ────────────────────────────────────────────────────────────────
-  const scenarioMatrix = activeLegs.length ? buildScenarioMatrix(activeLegs, effectiveSpot, iv, daysToExpiry, r) : null;
+  const scenarioMatrix = syncedActiveLegs.length ? buildScenarioMatrix(syncedActiveLegs, effectiveSpot, iv, daysToExpiry, r) : null;
 
   // ─── Probability of Profit ──────────────────────────────────────────────────────────
-  const pop = activeLegs.length ? probabilityOfProfit(activeLegs, effectiveSpot, iv, daysToExpiry, r) : null;
+  const pop = syncedActiveLegs.length ? probabilityOfProfit(syncedActiveLegs, effectiveSpot, iv, daysToExpiry, r) : null;
 
   // ─── Adjustments ─────────────────────────────────────────────────────────────────────────────
   type ThreatLevel = "safe" | "watch" | "danger";
   const BUFFER_WATCH = 0.03;
   const BUFFER_DANGER = 0.01;
 
-  const adjustments = activeLegs
+  const adjustments = syncedActiveLegs
     .filter(l => l.action === "SELL")
     .map(l => {
       const dist = l.contract.optionType === "CE"
@@ -318,6 +365,25 @@ export default function Simulator() {
   // ─── Duplicate leg ─────────────────────────────────────────────────────────────────────────
   const handleDuplicate = (leg: OptionLeg) => { addLeg({ ...leg }); };
 
+  // ─── Change a leg's expiry date + load its real historical entry price ───
+  const handleChangeLegExpiry = async (leg: OptionLeg, newExpiry: string) => {
+    updateLeg(leg.id, { contract: { ...leg.contract, expiry: newExpiry } });
+    const epoch = chain.times[chain.timeIdx];
+    if (!chain.selectedDate || epoch == null) return;
+    try {
+      const res = await fetchArchivedChain(chain.symbol, chain.selectedDate, newExpiry, epoch);
+      const row = res.data.expiryData.find(r => r.strike === leg.contract.strike);
+      if (row) {
+        const ltp = leg.contract.optionType === "CE" ? row.ce_ltp : row.pe_ltp;
+        const ivF = leg.contract.optionType === "CE" ? row.ce_iv : row.pe_iv;
+        if (ltp != null) updateLeg(leg.id, { entryPrice: ltp, iv: ivF ?? leg.iv, currentPrice: ltp });
+      }
+    } catch {
+      // No archived data for this strike/expiry/time combo — leg keeps its
+      // previous entry price rather than being left in a broken state.
+    }
+  };
+
   // ─── Trade Log (session-only activity feed, not persisted) ───────────
   const [tradeLog, setTradeLog] = useState<{ t: number; text: string }[]>([]);
   const prevLegsRef = useRef<OptionLeg[]>([]);
@@ -358,9 +424,6 @@ export default function Simulator() {
     flashToast(`Paper trade: ${ok} placed${fail ? `, ${fail} failed` : ""}`);
   };
 
-  // ─── Historical chain + walk-forward (shared across replay/WF bars + panel) ─
-  const chain = useHistoricalChain();
-
   // Strike list for Position Book's searchable Instrument dropdown
   const instrumentStrikes = (() => {
     const step = STRIKE_STEPS[underlying];
@@ -380,6 +443,7 @@ export default function Simulator() {
         <div className="flex items-center gap-2 shrink-0">
           <Zap size={18} color={theme.accent.cyan} />
           <span className="font-black text-sm" style={{ color: theme.accent.cyan }}>TradePro</span>
+          <span style={{ fontSize: 8, color: theme.text.faint }}>build-posbook-guards-1</span>
         </div>
 
         <div className="flex items-center gap-4 flex-wrap">
@@ -640,6 +704,10 @@ export default function Simulator() {
         excludedIds={excludedLegIds}
         onToggleActive={toggleLegActive}
         instrumentOptions={instrumentStrikes}
+        liveOverrides={liveOverrides}
+        expiryOptions={chain.expiries}
+        expiryLabel={fmtDateLabel}
+        onChangeLegExpiry={handleChangeLegExpiry}
         spot={effectiveSpot}
         T={T}
         riskFreeRate={r}
