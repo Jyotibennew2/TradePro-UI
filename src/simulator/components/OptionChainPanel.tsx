@@ -1,13 +1,13 @@
 /**
  * TradePro Simulator - Option Chain panel (left workspace column, Section A)
  * StockMock-style visual polish pass:
- *   - multi-expiry tab row (with DTE) + a searchable expiry jump dropdown
- *     beside it — selecting an expiry loads instantly while the current
- *     date/time selection is preserved by the hook where possible.
- *   - ATM IV / Straddle Premium / PCR / Max Pain summary strip (derived
- *     client-side from the already-fetched chain data — no new backend
- *     calculation)
+ *   - multi-expiry tab row (with DTE) instead of a dropdown
+ *   - ATM IV / Straddle Premium / PCR summary strip (derived client-side
+ *     from the already-fetched chain data — no new backend calculation)
  *   - OI bars behind the OI column, scaled to the max OI on screen
+ *   - full Date & Time Selector (year/month/calendar + archived-time
+ *     picker + Prev/Next Candle + Prev/Next Trading Day) in place of the
+ *     old plain date dropdown
  * Underlying data/handlers (useHistoricalChain) are unchanged.
  */
 import { useTheme } from "../../store/themeStore";
@@ -18,6 +18,7 @@ import ErrorBox from "../../components/ui/ErrorBox";
 import { SYMBOLS, OPTIONAL_COLS, fmt, fmtDateLabel } from "../hooks/useHistoricalChain";
 import type { HistoricalChain } from "../hooks/useHistoricalChain";
 import SearchableSelect from "./SearchableSelect";
+import DateTimeSelector from "./DateTimeSelector";
 
 function dteFor(expiry: string, fromDate: string): number | null {
   if (!fromDate) return null;
@@ -121,14 +122,9 @@ export default function OptionChainPanel({ chain }: { chain: HistoricalChain }) 
           </div>
         )}
 
-        {/* Jump to date */}
-        {chain.dates.length > 0 && (
-          <select value={chain.dateIdx} onChange={e => chain.setDateIdx(Number(e.target.value))}
-            className="w-full px-2 py-1.5 rounded-lg text-sm outline-none"
-            style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.text.secondary }}>
-            {chain.dates.map((d, i) => <option key={d} value={i}>{fmtDateLabel(d)}</option>)}
-          </select>
-        )}
+        {/* Date & Time Selector: year/month/calendar + archived-time picker
+            + Prev/Next Candle + Prev/Next Trading Day */}
+        <DateTimeSelector chain={chain} />
 
         {/* ATM IV / Straddle Premium / PCR / Max Pain strip */}
         {chain.chainData && (
