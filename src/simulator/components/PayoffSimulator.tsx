@@ -3,19 +3,15 @@
  * Live/Expiry/Custom date payoff with sliders.
  */
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import {
   ComposedChart, Area, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
-import { PricingEngine }      from "../pricing/PricingEngine";
-import { ProbabilityEngine }  from "../pricing/ProbabilityEngine";
-import { buildPayoffCurve }   from "../pricing/PayoffEngine";
+import { ProbabilityEngine } from "../pricing/ProbabilityEngine";
 import { spotRange, daysToYears, bsPrice } from "../pricing/BlackScholes";
 import type { OptionLeg }     from "../models/Option";
-
-// ─── Props ────────────────────────────────────────────────────────────────────
 
 interface Props {
   legs       : OptionLeg[];
@@ -26,8 +22,6 @@ interface Props {
 }
 
 type ViewMode = "expiry" | "today" | "custom";
-
-// ─── Tooltip ──────────────────────────────────────────────────────────────────
 
 function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
@@ -43,8 +37,6 @@ function ChartTooltip({ active, payload, label }: any) {
     </div>
   );
 }
-
-// ─── Slider ───────────────────────────────────────────────────────────────────
 
 function Slider({ label, value, min, max, step, onChange, color = "#00c8f0", format }: {
   label: string; value: number; min: number; max: number;
@@ -78,14 +70,12 @@ function Slider({ label, value, min, max, step, onChange, color = "#00c8f0", for
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
-
 export default function PayoffSimulator({ legs, spot, iv, daysToExpiry, r }: Props) {
   const [viewMode,   setViewMode]   = useState<ViewMode>("expiry");
   const [customDays, setCustomDays] = useState(Math.floor(daysToExpiry / 2));
-  const [spotShift,  setSpotShift]  = useState(0);      // % shift
-  const [ivShift,    setIvShift]    = useState(0);       // % points shift
-  const [rShift,     setRShift]     = useState(0);       // % points shift
+  const [spotShift,  setSpotShift]  = useState(0);
+  const [ivShift,    setIvShift]    = useState(0);
+  const [rShift,     setRShift]     = useState(0);
   const [showToday,  setShowToday]  = useState(true);
   const [showExpiry, setShowExpiry] = useState(true);
 
@@ -98,7 +88,6 @@ export default function PayoffSimulator({ legs, spot, iv, daysToExpiry, r }: Pro
     );
   }
 
-  // Adjusted params
   const adjSpot = spot * (1 + spotShift / 100);
   const adjIV   = Math.max(iv + ivShift, 0.5);
   const adjR    = Math.max(r * 100 + rShift, 0) / 100;
@@ -108,17 +97,13 @@ export default function PayoffSimulator({ legs, spot, iv, daysToExpiry, r }: Pro
     viewMode === "today"  ? 0 :
     customDays;
 
-  // Chart data
   const chartData = useMemo(() => {
     if (!spot || !legs.length) return [];
     const spots  = spotRange(adjSpot, 0.12, 100);
-    const T_exp  = 0;
     const T_view = daysToYears(daysForView);
-    const T_today= 0;
 
     return spots.map(s => {
       const expiryPnl = legs.reduce((sum, leg) => {
-        const iv_   = Math.max(leg.iv + ivShift, 0.5) / 100;
         const price = Math.max(
           leg.contract.optionType === "CE" ? s - leg.contract.strike : leg.contract.strike - s,
           0
@@ -161,14 +146,12 @@ export default function PayoffSimulator({ legs, spot, iv, daysToExpiry, r }: Pro
     });
   }, [legs, adjSpot, adjIV, adjR, daysForView, ivShift, spotShift]);
 
-  // Stats
   const stats = useMemo(() => {
     if (!chartData.length) return null;
     const expPnls  = chartData.map(d => d.expiry);
     const maxProfit= Math.max(...expPnls);
     const maxLoss  = Math.min(...expPnls);
 
-    // Breakevens
     const breakevens: number[] = [];
     for (let i = 1; i < chartData.length; i++) {
       if (chartData[i-1].expiry * chartData[i].expiry < 0) {
@@ -187,7 +170,6 @@ export default function PayoffSimulator({ legs, spot, iv, daysToExpiry, r }: Pro
     return { maxProfit, maxLoss, breakevens, prob };
   }, [chartData, adjSpot, adjIV, adjR, daysToExpiry]);
 
-  // Time scenarios
   const scenarios = useMemo(() => {
     return ProbabilityEngine.timeScenarios(
       legs.map(l => ({
@@ -217,7 +199,6 @@ export default function PayoffSimulator({ legs, spot, iv, daysToExpiry, r }: Pro
 
   return (
     <div className="space-y-4">
-      {/* View mode selector */}
       <div className="flex gap-1 flex-wrap">
         {([
           { id: "expiry", label: "At Expiry" },
@@ -242,7 +223,6 @@ export default function PayoffSimulator({ legs, spot, iv, daysToExpiry, r }: Pro
         )}
       </div>
 
-      {/* Stats row */}
       {stats && (
         <div className="grid grid-cols-2 gap-2">
           {[
@@ -260,7 +240,6 @@ export default function PayoffSimulator({ legs, spot, iv, daysToExpiry, r }: Pro
         </div>
       )}
 
-      {/* Chart */}
       <div className="rounded-xl p-3"
         style={{ background: "#090f1e", border: "1px solid #0f1e36" }}>
         <div className="flex gap-3 mb-2 text-xs">
@@ -312,23 +291,19 @@ export default function PayoffSimulator({ legs, spot, iv, daysToExpiry, r }: Pro
         </ResponsiveContainer>
       </div>
 
-      {/* Sliders */}
       <div className="rounded-xl p-3 space-y-4"
         style={{ background: "#090f1e", border: "1px solid #0f1e36" }}>
         <div className="text-xs font-bold" style={{ color: "#445566" }}>SCENARIO SLIDERS</div>
-
         <Slider label="Spot Price Shift" value={spotShift}
           min={-15} max={15} step={0.5} onChange={setSpotShift}
           color="#00c8f0"
           format={v => `${v > 0 ? "+" : ""}${v}% (₹${Math.round(adjSpot).toLocaleString("en-IN")})`}
         />
-
         <Slider label="IV Shift" value={ivShift}
           min={-10} max={10} step={0.5} onChange={setIvShift}
           color="#9b5cf6"
           format={v => `${v > 0 ? "+" : ""}${v}% → ${adjIV.toFixed(1)}%`}
         />
-
         {viewMode === "custom" && (
           <Slider label="Days to Expiry" value={customDays}
             min={0} max={daysToExpiry} step={1} onChange={setCustomDays}
@@ -336,7 +311,6 @@ export default function PayoffSimulator({ legs, spot, iv, daysToExpiry, r }: Pro
             format={v => `${v}d left`}
           />
         )}
-
         <Slider label="Interest Rate Shift" value={rShift}
           min={-3} max={3} step={0.1} onChange={setRShift}
           color="#445566"
@@ -344,7 +318,6 @@ export default function PayoffSimulator({ legs, spot, iv, daysToExpiry, r }: Pro
         />
       </div>
 
-      {/* Breakevens */}
       {stats && stats.breakevens.length > 0 && (
         <div className="rounded-xl p-3"
           style={{ background: "#090f1e", border: "1px solid #0f1e36" }}>
@@ -360,7 +333,6 @@ export default function PayoffSimulator({ legs, spot, iv, daysToExpiry, r }: Pro
         </div>
       )}
 
-      {/* Probability */}
       {stats && (
         <div className="rounded-xl p-3"
           style={{ background: "#090f1e", border: "1px solid #0f1e36" }}>
@@ -398,7 +370,6 @@ export default function PayoffSimulator({ legs, spot, iv, daysToExpiry, r }: Pro
         </div>
       )}
 
-      {/* Time scenarios */}
       <div className="rounded-xl p-3"
         style={{ background: "#090f1e", border: "1px solid #0f1e36" }}>
         <div className="text-xs mb-3" style={{ color: "#445566" }}>TIME DECAY SCENARIOS</div>

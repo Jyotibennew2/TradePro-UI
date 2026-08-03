@@ -21,10 +21,10 @@ function StatBox({ label, value, sub, color, theme }: {
 
 export default function Dashboard() {
   const theme = useTheme();
-  const health  = useQuery({ queryKey: ["health"],    queryFn: fetchHealth,    refetchInterval: 10000 });
-  const quotes  = useQuery({ queryKey: ["quotes"],    queryFn: fetchQuotes,    refetchInterval: 3000  });
-  const funds   = useQuery({ queryKey: ["funds"],     queryFn: fetchFunds,     refetchInterval: 30000 });
-  const paper   = useQuery({ queryKey: ["portfolio"], queryFn: fetchPortfolio, refetchInterval: 5000  });
+  const health  = useQuery({ queryKey: ["health"],    queryFn: fetchHealth,           refetchInterval: 10000 });
+  const quotes  = useQuery({ queryKey: ["quotes"],    queryFn: () => fetchQuotes(),   refetchInterval: 3000  });
+  const funds   = useQuery({ queryKey: ["funds"],     queryFn: fetchFunds,            refetchInterval: 30000 });
+  const paper   = useQuery({ queryKey: ["portfolio"], queryFn: fetchPortfolio,        refetchInterval: 5000  });
 
   const q       = quotes.data?.data ?? {};
   const nifty   = q["NSE:NIFTY50-INDEX"];
@@ -38,7 +38,6 @@ export default function Dashboard() {
 
   const pct = (n?: number) => n != null ? `${n > 0 ? "+" : ""}${n.toFixed(2)}%` : "";
 
-  // Simulated equity curve from paper portfolio
   const equityCurve = [
     { t: "9:15",  v: 500000 },
     { t: "10:00", v: 500000 + (p?.realized_pnl ?? 0) * 0.2 },
@@ -125,7 +124,7 @@ export default function Dashboard() {
             <Tooltip
               contentStyle={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}`, borderRadius: 8, fontSize: 13 }}
               labelStyle={{ color: theme.text.muted }}
-              formatter={(v: number) => [`₹${v.toLocaleString("en-IN")}`, "Capital"]}
+              formatter={(v) => [`₹${Number(v ?? 0).toLocaleString("en-IN")}`, "Capital"]}
             />
             <Area type="monotone" dataKey="v" stroke={theme.accent.cyan} strokeWidth={2} fill="url(#pnlGrad)" />
           </AreaChart>
@@ -152,3 +151,6 @@ export default function Dashboard() {
     </div>
   );
 }
+
+// Suppress unused-import warnings for icons reserved for future stat cards
+void TrendingUp; void TrendingDown; void DollarSign; void Activity;

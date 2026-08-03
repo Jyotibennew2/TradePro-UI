@@ -1,9 +1,6 @@
 /**
  * TradePro - Historical Option Chain (standalone)
- * Used on the Backtest page. Now powered by the shared useHistoricalChain
- * hook (same state/effects/handlers as before — just extracted so the
- * Simulator page's redesigned layout can reuse the same logic in separate
- * pieces). Rendering/behavior here is unchanged.
+ * Used on the Backtest page. Powered by the shared useHistoricalChain hook.
  */
 import { useState } from "react";
 import {
@@ -25,7 +22,7 @@ export default function HistoricalOptionChain() {
   const theme = useTheme();
   const chain = useHistoricalChain();
   const { columns } = useChainColumnsStore();
-  const activeOptional = OPTIONAL_COLS.filter(c => (columns as Record<string, boolean>)[c.key]);
+  const activeOptional = OPTIONAL_COLS.filter(c => (columns as unknown as Record<string, boolean>)[c.key]);
   const gridTemplate = `${"0.8fr ".repeat(activeOptional.length)}1fr 60px 1fr ${"0.8fr ".repeat(activeOptional.length)}`.trim();
   const [speedOpen, setSpeedOpen] = useState(false);
 
@@ -141,11 +138,11 @@ export default function HistoricalOptionChain() {
               <div className="max-h-[420px] overflow-y-auto space-y-0.5 pr-1">
                 {activeOptional.length > 0 && (
                   <div className="grid text-center px-1 font-semibold" style={{ gridTemplateColumns: gridTemplate, fontSize: 9, color: theme.text.faint }}>
-                    {activeOptional.map(c => <div key={c.key} style={{ color: theme.accent.green }}>{CHAIN_COLUMN_LABELS[c.key]}</div>)}
+                    {activeOptional.map(c => <div key={c.key} style={{ color: theme.accent.green }}>{(CHAIN_COLUMN_LABELS as Record<string, string>)[c.key]}</div>)}
                     <div style={{ color: theme.accent.green }}>CE</div>
                     <div style={{ color: theme.accent.cyan }}>STRK</div>
                     <div style={{ color: theme.accent.red }}>PE</div>
-                    {activeOptional.map(c => <div key={c.key} style={{ color: theme.accent.red }}>{CHAIN_COLUMN_LABELS[c.key]}</div>)}
+                    {activeOptional.map(c => <div key={c.key} style={{ color: theme.accent.red }}>{(CHAIN_COLUMN_LABELS as Record<string, string>)[c.key]}</div>)}
                   </div>
                 )}
                 {chain.chainData.map((row, i) => (

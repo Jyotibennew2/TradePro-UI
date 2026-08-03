@@ -1,14 +1,5 @@
 /**
  * TradePro Simulator - Option Chain panel (left workspace column, Section A)
- * StockMock-style visual polish pass:
- *   - multi-expiry tab row (with DTE) instead of a dropdown
- *   - ATM IV / Straddle Premium / PCR summary strip (derived client-side
- *     from the already-fetched chain data — no new backend calculation)
- *   - OI bars behind the OI column, scaled to the max OI on screen
- *   - full Date & Time Selector (year/month/calendar + archived-time
- *     picker + Prev/Next Candle + Prev/Next Trading Day) in place of the
- *     old plain date dropdown
- * Underlying data/handlers (useHistoricalChain) are unchanged.
  */
 import { useTheme } from "../../store/themeStore";
 import { useChainColumnsStore, CHAIN_COLUMN_LABELS } from "../../store/chainColumnsStore";
@@ -26,14 +17,6 @@ function dteFor(expiry: string, fromDate: string): number | null {
   return Math.round(ms / 86400000);
 }
 
-/**
- * Max Pain: the strike at which option WRITERS collectively pay out the
- * least at expiry. For each candidate settlement strike S, sum what
- * writers would owe: ITM calls (strike < S) pay (S - strike) * ce_oi,
- * ITM puts (strike > S) pay (strike - S) * pe_oi. The strike minimizing
- * that total is Max Pain. Standard formula, computed from the OI already
- * in the fetched chain — no new data source.
- */
 function computeMaxPain(rows: { strike: number; ce_oi?: number | null; pe_oi?: number | null }[]): number | null {
   if (!rows || rows.length === 0) return null;
   let best: number | null = null;
@@ -53,7 +36,7 @@ function computeMaxPain(rows: { strike: number; ce_oi?: number | null; pe_oi?: n
 export default function OptionChainPanel({ chain }: { chain: HistoricalChain }) {
   const theme = useTheme();
   const { columns } = useChainColumnsStore();
-  const activeOptional = OPTIONAL_COLS.filter(c => (columns as Record<string, boolean>)[c.key]);
+  const activeOptional = OPTIONAL_COLS.filter(c => (columns as unknown as Record<string, boolean>)[c.key]);
   const gridTemplate = `${"0.8fr ".repeat(activeOptional.length)}1fr 60px 1fr ${"0.8fr ".repeat(activeOptional.length)}`.trim();
 
   const atmRow = chain.chainData?.find(r => r.atm) ?? null;
@@ -92,7 +75,6 @@ export default function OptionChainPanel({ chain }: { chain: HistoricalChain }) 
           Archive currently covers NIFTY &amp; BANKNIFTY only.
         </div>
 
-        {/* Multi-expiry tab row with DTE + searchable jump */}
         {chain.expiries.length > 0 && (
           <div className="flex items-center gap-2">
             <div className="flex gap-1 overflow-x-auto pb-1 flex-1">
@@ -122,11 +104,8 @@ export default function OptionChainPanel({ chain }: { chain: HistoricalChain }) 
           </div>
         )}
 
-        {/* Date & Time Selector: year/month/calendar + archived-time picker
-            + Prev/Next Candle + Prev/Next Trading Day */}
         <DateTimeSelector chain={chain} />
 
-        {/* ATM IV / Straddle Premium / PCR / Max Pain strip */}
         {chain.chainData && (
           <div className="grid grid-cols-2 gap-1.5">
             <div className="rounded-lg text-center py-1" style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}` }}>
@@ -163,11 +142,11 @@ export default function OptionChainPanel({ chain }: { chain: HistoricalChain }) 
                 className="grid text-center px-1 font-semibold"
                 style={{ gridTemplateColumns: gridTemplate, fontSize: 9, color: theme.text.faint }}
               >
-                {activeOptional.map(c => <div key={c.key} style={{ color: theme.accent.green }}>{CHAIN_COLUMN_LABELS[c.key]}</div>)}
+                {activeOptional.map(c => <div key={c.key} style={{ color: theme.accent.green }}>{(CHAIN_COLUMN_LABELS as Record<string, string>)[c.key]}</div>)}
                 <div style={{ color: theme.accent.green }}>CE</div>
                 <div style={{ color: theme.accent.cyan }}>STRK</div>
                 <div style={{ color: theme.accent.red }}>PE</div>
-                {activeOptional.map(c => <div key={c.key} style={{ color: theme.accent.red }}>{CHAIN_COLUMN_LABELS[c.key]}</div>)}
+                {activeOptional.map(c => <div key={c.key} style={{ color: theme.accent.red }}>{(CHAIN_COLUMN_LABELS as Record<string, string>)[c.key]}</div>)}
               </div>
             )}
             <div className="max-h-[420px] overflow-y-auto space-y-0.5 pr-1">

@@ -4,7 +4,7 @@
  * Quick-nav icon rail on the left jumps between sections.
  */
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useAppStore } from "../store";
 import { useSimulatorStore, makeOptionLeg } from "../simulator/state/simulatorStore";
 import { calculatePayoff } from "../simulator/pricing/PayoffEngine";
@@ -37,7 +37,7 @@ export default function Workspace() {
   const payoffRef = useRef<HTMLDivElement>(null);
   const greeksRef = useRef<HTMLDivElement>(null);
 
-  const scrollTo = (ref: React.RefObject<HTMLDivElement>) => {
+  const scrollTo = (ref: React.RefObject<HTMLDivElement | null>) => {
     ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
@@ -56,7 +56,6 @@ export default function Workspace() {
     }
   }, [legs, effectiveSpot, r]);
 
-  // Auto-calculate payoff whenever legs change (add/edit/remove) — no manual button needed
   useEffect(() => {
     if (legs.length > 0) {
       calculate();
@@ -135,7 +134,7 @@ export default function Workspace() {
             <div className="min-w-0 space-y-3">
               <Card title="Add Legs">
                 <div className="grid grid-cols-2 gap-2">
-                  {([["CE","BUY",theme.accent.green],["CE","SELL",theme.accent.red],["PE","BUY",theme.accent.cyan],["PE","SELL",theme.accent.purple]] as const).map(
+                  {(["CE","BUY",theme.accent.green],["CE","SELL",theme.accent.red],["PE","BUY",theme.accent.cyan],["PE","SELL",theme.accent.purple]] as const).map(
                     ([type, action, color]) => (
                       <button key={`${action}-${type}`}
                         onClick={() => addCustomLeg(type, action)}
