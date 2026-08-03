@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useAppStore } from "../store";
 import { useSimulatorStore } from "../simulator/state/simulatorStore";
-import { Send, Bot, User, TrendingUp, BarChart2, Zap } from "lucide-react";
+import { Send, Bot, User } from "lucide-react";
 import { useTheme } from "../store/themeStore";
 
 interface Message {
@@ -67,19 +67,7 @@ export default function AIAssistant() {
     setLoading(true);
 
     try {
-      const systemPrompt = `You are TradePro AI, an expert options trading assistant for Indian markets (NSE). You help traders with NIFTY and BankNifty options strategies.
-
-Always respond in Hinglish (mix of Hindi and English) to be friendly and easy to understand for Indian traders.
-
-${getContext()}
-
-Rules:
-- Always mention specific strike prices and premiums when suggesting strategies
-- Explain risk clearly in rupees
-- Keep responses concise and actionable
-- Add relevant emojis to make it engaging
-- Always mention stop loss levels
-- Disclaimer: These are educational suggestions, not financial advice`;
+      const systemPrompt = `You are TradePro AI, an expert options trading assistant for Indian markets (NSE). You help traders with NIFTY and BankNifty options strategies.\n\nAlways respond in Hinglish (mix of Hindi and English) to be friendly and easy to understand for Indian traders.\n\n${getContext()}\n\nRules:\n- Always mention specific strike prices and premiums when suggesting strategies\n- Explain risk clearly in rupees\n- Keep responses concise and actionable\n- Add relevant emojis to make it engaging\n- Always mention stop loss levels\n- Disclaimer: These are educational suggestions, not financial advice`;
 
       const response = await fetch("/api/ai/chat", {
         method : "POST",
@@ -149,7 +137,6 @@ Rules:
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
         {messages.map((msg, i) => (
           <div key={i} className={`flex gap-2 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
-            {/* Avatar */}
             <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1"
               style={{
                 background: msg.role === "assistant" ? theme.accent.cyan + "20" : theme.accent.purple + "20",
@@ -160,8 +147,6 @@ Rules:
                 : <User size={16} color={theme.accent.purple} />
               }
             </div>
-
-            {/* Bubble */}
             <div className="max-w-xs">
               <div className="rounded-2xl px-3 py-2 text-sm"
                 style={{
@@ -179,8 +164,6 @@ Rules:
             </div>
           </div>
         ))}
-
-        {/* Loading */}
         {loading && (
           <div className="flex gap-2">
             <div className="w-8 h-8 rounded-full flex items-center justify-center"
@@ -198,7 +181,6 @@ Rules:
             </div>
           </div>
         )}
-
         <div ref={bottomRef} />
       </div>
 

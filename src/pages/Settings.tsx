@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchHealth, fetchFunds } from "../utils/api";
 import Card from "../components/ui/Card";
-import Badge from "../components/ui/Badge";
-import { Server, Database, Clock, Shield, Sun, Moon } from "lucide-react";
+import { Sun, Moon } from "lucide-react";
 import { useTheme, useThemeStore } from "../store/themeStore";
 
 export default function Settings() {
@@ -76,18 +75,9 @@ export default function Settings() {
       <Card title="API Endpoints">
         <div className="space-y-1">
           {[
-            "/api/health",
-            "/api/quotes",
-            "/api/optionchain",
-            "/api/greeks",
-            "/api/strategy",
-            "/api/scanner",
-            "/api/papertrade",
-            "/api/portfolio",
-            "/api/funds",
-            "/api/backtest",
-            "/api/historical",
-            "/api/scheduler",
+            "/api/health", "/api/quotes", "/api/optionchain", "/api/greeks",
+            "/api/strategy", "/api/scanner", "/api/papertrade", "/api/portfolio",
+            "/api/funds", "/api/backtest", "/api/historical", "/api/scheduler",
           ].map(ep => (
             <div key={ep} className="flex items-center justify-between py-1 border-b"
               style={{ borderColor: theme.border.subtle }}>

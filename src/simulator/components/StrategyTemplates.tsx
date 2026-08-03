@@ -4,13 +4,9 @@
  */
 
 import type { StrategyType } from "../models/Strategy";
-import type { UnderlyingType } from "../models/Option";
-import { StrategyBuilder }    from "../services/strategyBuilder";
-import { useSimulatorStore }  from "../state/simulatorStore";
 
 interface Template {
-  key        : StrategyType | "LONG_STRADDLE" | "LONG_STRANGLE" | "COVERED_CALL"
-               | "JADE_LIZARD" | "BWB" | "CALENDAR" | "DIAGONAL" | "RATIO";
+  key        : StrategyType | "CALENDAR" | "DIAGONAL";
   label      : string;
   outlook    : string;
   complexity : "BASIC" | "INTERMEDIATE" | "ADVANCED";
@@ -19,23 +15,23 @@ interface Template {
 }
 
 const TEMPLATES: Template[] = [
-  { key: "LONG_CALL",       label: "Long Call",           outlook: "Bullish",  complexity: "BASIC",        legs: 1, emoji: "📈" },
-  { key: "LONG_PUT",        label: "Long Put",            outlook: "Bearish",  complexity: "BASIC",        legs: 1, emoji: "📉" },
-  { key: "COVERED_CALL",    label: "Covered Call",        outlook: "Neutral",  complexity: "BASIC",        legs: 1, emoji: "🛡️" },
-  { key: "BULL_CALL_SPREAD",label: "Bull Call Spread",    outlook: "Bullish",  complexity: "INTERMEDIATE", legs: 2, emoji: "🐂" },
-  { key: "BEAR_PUT_SPREAD", label: "Bear Put Spread",     outlook: "Bearish",  complexity: "INTERMEDIATE", legs: 2, emoji: "🐻" },
-  { key: "SHORT_STRADDLE",  label: "Short Straddle",      outlook: "Sideways", complexity: "INTERMEDIATE", legs: 2, emoji: "⚡" },
-  { key: "LONG_STRADDLE",   label: "Long Straddle",       outlook: "Volatile", complexity: "INTERMEDIATE", legs: 2, emoji: "🌊" },
-  { key: "SHORT_STRANGLE",  label: "Short Strangle",      outlook: "Sideways", complexity: "INTERMEDIATE", legs: 2, emoji: "🔒" },
-  { key: "LONG_STRANGLE",   label: "Long Strangle",       outlook: "Volatile", complexity: "INTERMEDIATE", legs: 2, emoji: "💥" },
-  { key: "IRON_CONDOR",     label: "Iron Condor",         outlook: "Sideways", complexity: "ADVANCED",     legs: 4, emoji: "🦅" },
-  { key: "IRON_FLY",        label: "Iron Butterfly",      outlook: "Sideways", complexity: "ADVANCED",     legs: 4, emoji: "🦋" },
-  { key: "JADE_LIZARD",     label: "Jade Lizard",         outlook: "Bullish",  complexity: "ADVANCED",     legs: 3, emoji: "🦎" },
-  { key: "BWB",             label: "Broken Wing Butterfly",outlook: "Neutral", complexity: "ADVANCED",     legs: 3, emoji: "🪁" },
-  { key: "BULL_PUT_SPREAD", label: "Bull Put Spread",     outlook: "Bullish",  complexity: "INTERMEDIATE", legs: 2, emoji: "📊" },
-  { key: "BEAR_CALL_SPREAD",label: "Bear Call Spread",    outlook: "Bearish",  complexity: "INTERMEDIATE", legs: 2, emoji: "📊" },
-  { key: "RATIO",           label: "Ratio Spread",        outlook: "Neutral",  complexity: "ADVANCED",     legs: 3, emoji: "⚖️" },
-  { key: "CUSTOM",          label: "Custom Strategy",     outlook: "Any",      complexity: "ADVANCED",     legs: 0, emoji: "🔧" },
+  { key: "LONG_CALL",       label: "Long Call",            outlook: "Bullish",  complexity: "BASIC",        legs: 1, emoji: "📈" },
+  { key: "LONG_PUT",        label: "Long Put",             outlook: "Bearish",  complexity: "BASIC",        legs: 1, emoji: "📉" },
+  { key: "COVERED_CALL",    label: "Covered Call",         outlook: "Neutral",  complexity: "BASIC",        legs: 1, emoji: "🛡️" },
+  { key: "BULL_CALL_SPREAD",label: "Bull Call Spread",     outlook: "Bullish",  complexity: "INTERMEDIATE", legs: 2, emoji: "🐂" },
+  { key: "BEAR_PUT_SPREAD", label: "Bear Put Spread",      outlook: "Bearish",  complexity: "INTERMEDIATE", legs: 2, emoji: "🐻" },
+  { key: "SHORT_STRADDLE",  label: "Short Straddle",       outlook: "Sideways", complexity: "INTERMEDIATE", legs: 2, emoji: "⚡" },
+  { key: "LONG_STRADDLE",   label: "Long Straddle",        outlook: "Volatile", complexity: "INTERMEDIATE", legs: 2, emoji: "🌊" },
+  { key: "SHORT_STRANGLE",  label: "Short Strangle",       outlook: "Sideways", complexity: "INTERMEDIATE", legs: 2, emoji: "🔒" },
+  { key: "LONG_STRANGLE",   label: "Long Strangle",        outlook: "Volatile", complexity: "INTERMEDIATE", legs: 2, emoji: "💥" },
+  { key: "IRON_CONDOR",     label: "Iron Condor",          outlook: "Sideways", complexity: "ADVANCED",     legs: 4, emoji: "🦅" },
+  { key: "IRON_FLY",        label: "Iron Butterfly",       outlook: "Sideways", complexity: "ADVANCED",     legs: 4, emoji: "🦋" },
+  { key: "JADE_LIZARD",     label: "Jade Lizard",          outlook: "Bullish",  complexity: "ADVANCED",     legs: 3, emoji: "🦎" },
+  { key: "BWB",             label: "Broken Wing Butterfly",outlook: "Neutral",  complexity: "ADVANCED",     legs: 3, emoji: "🪁" },
+  { key: "BULL_PUT_SPREAD", label: "Bull Put Spread",      outlook: "Bullish",  complexity: "INTERMEDIATE", legs: 2, emoji: "📊" },
+  { key: "BEAR_CALL_SPREAD",label: "Bear Call Spread",     outlook: "Bearish",  complexity: "INTERMEDIATE", legs: 2, emoji: "📊" },
+  { key: "RATIO",           label: "Ratio Spread",         outlook: "Neutral",  complexity: "ADVANCED",     legs: 3, emoji: "⚖️" },
+  { key: "CUSTOM",          label: "Custom Strategy",      outlook: "Any",      complexity: "ADVANCED",     legs: 0, emoji: "🔧" },
 ];
 
 const COMPLEXITY_COLOR: Record<string, string> = {

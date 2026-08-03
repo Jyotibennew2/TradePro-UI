@@ -7,9 +7,7 @@ import { bsPrice }       from "../pricing/BlackScholes";
 import { makeOptionLeg } from "../state/simulatorStore";
 import type { OptionLeg, UnderlyingType } from "../models/Option";
 import type { StrategyType }              from "../models/Strategy";
-import { STRIKE_STEPS, LOT_SIZES }        from "../models/Option";
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+import { STRIKE_STEPS }                   from "../models/Option";
 
 function atm(spot: number, underlying: UnderlyingType): number {
   const step = STRIKE_STEPS[underlying];
@@ -25,8 +23,6 @@ function getPremium(
     0.05,
   );
 }
-
-// ─── Strategy Builder ─────────────────────────────────────────────────────────
 
 export class StrategyBuilder {
 
@@ -76,6 +72,15 @@ export class StrategyBuilder {
           leg(A - step * 2, "PE", "SELL"),
         ].map(addId);
 
+      case "LONG_STRADDLE":
+        return [leg(A, "CE", "BUY"), leg(A, "PE", "BUY")].map(addId);
+
+      case "LONG_STRANGLE":
+        return [
+          leg(A + step * 2, "CE", "BUY"),
+          leg(A - step * 2, "PE", "BUY"),
+        ].map(addId);
+
       case "IRON_CONDOR":
         return [
           leg(A + step * 2, "CE", "SELL"),
@@ -116,20 +121,8 @@ export class StrategyBuilder {
           leg(A + step * 2, "CE", "BUY"),
         ].map(addId);
 
-      case "LONG_STRADDLE":
-        return [
-          leg(A, "CE", "BUY"),
-          leg(A, "PE", "BUY"),
-        ].map(addId);
-
-      case "LONG_STRANGLE":
-        return [
-          leg(A + step * 2, "CE", "BUY"),
-          leg(A - step * 2, "PE", "BUY"),
-        ].map(addId);
-
       case "COVERED_CALL":
-        return [leg(A, "CE", "SELL")].map(addId);
+        return [leg(A + step, "CE", "SELL")].map(addId);
 
       case "JADE_LIZARD":
         return [
@@ -152,26 +145,12 @@ export class StrategyBuilder {
           leg(A + step * 2, "CE", "SELL", 2),
         ].map(addId);
 
-      case "BULL_PUT_SPREAD":
-        return [
-          leg(A,            "PE", "SELL"),
-          leg(A - step * 2, "PE", "BUY"),
-        ].map(addId);
-
-      case "BEAR_CALL_SPREAD":
-        return [
-          leg(A,            "CE", "SELL"),
-          leg(A + step * 2, "CE", "BUY"),
-        ].map(addId);
-
       case "CUSTOM":
       default:
         return [];
     }
   }
 }
-
-// ─── Add UUID ─────────────────────────────────────────────────────────────────
 
 function addId(leg: Omit<OptionLeg, "id">): OptionLeg {
   return { ...leg, id: uuidv4() };

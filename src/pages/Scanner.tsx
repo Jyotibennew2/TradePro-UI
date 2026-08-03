@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchScanner } from "../utils/api";
-import Card from "../components/ui/Card";
 import Badge from "../components/ui/Badge";
 import Loader from "../components/ui/Loader";
 import ErrorBox from "../components/ui/ErrorBox";
@@ -41,7 +40,6 @@ export default function Scanner() {
 
   return (
     <div className="p-4 space-y-4">
-      {/* Controls */}
       <div className="flex items-center gap-2 flex-wrap">
         <div className="flex rounded-lg overflow-hidden"
           style={{ border: `1px solid ${theme.border.subtle}` }}>
@@ -56,13 +54,11 @@ export default function Scanner() {
             </button>
           ))}
         </div>
-
         <span className="text-sm" style={{ color: theme.text.muted }}>
           LTP: <span style={{ color: theme.accent.cyan, fontWeight: 700 }}>
             {ltp > 0 ? ltp.toLocaleString("en-IN") : "---"}
           </span>
         </span>
-
         <button onClick={() => refetch()}
           className="p-2 rounded-lg ml-auto"
           style={{ background: theme.border.subtle, color: theme.accent.cyan }}>
@@ -70,7 +66,6 @@ export default function Scanner() {
         </button>
       </div>
 
-      {/* Summary */}
       {results.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
           {[
@@ -87,14 +82,12 @@ export default function Scanner() {
         </div>
       )}
 
-      {/* Updated time */}
       {updated && (
         <div className="text-right text-sm" style={{ color: theme.text.faint }}>
           Updated: {updated} • auto 15s
         </div>
       )}
 
-      {/* Results */}
       {isLoading && <Loader text="Running scanners..." />}
       {isError   && <ErrorBox message="Scanner failed" />}
 
@@ -110,14 +103,8 @@ export default function Scanner() {
                 </span>
               </div>
               <div className="flex items-center gap-1">
-                <Badge
-                  label={r.signal}
-                  variant={r.signal.toLowerCase() as "buy" | "sell" | "neutral"}
-                />
-                <Badge
-                  label={r.strength}
-                  variant={r.strength.toLowerCase() as "strong" | "moderate" | "weak"}
-                />
+                <Badge label={r.signal}   variant={r.signal.toLowerCase()   as "buy" | "sell" | "neutral"} />
+                <Badge label={r.strength} variant={r.strength.toLowerCase() as "strong" | "moderate" | "weak"} />
               </div>
             </div>
             <div className="text-sm mt-1" style={{ color: theme.text.muted }}>

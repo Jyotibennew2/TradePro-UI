@@ -5,15 +5,20 @@ import { useAppStore } from "../store";
 
 export function useHealth() {
   const { setLive, setMock } = useAppStore();
-  return useQuery({
-    queryKey    : ["health"],
-    queryFn     : fetchHealth,
+  const query = useQuery({
+    queryKey       : ["health"],
+    queryFn        : fetchHealth,
     refetchInterval: 10_000,
-    onSuccess   : (d) => {
-      setLive(!d.mock_mode);
-      setMock(d.mock_mode);
-    },
   });
+
+  useEffect(() => {
+    if (query.data) {
+      setLive(!query.data.mock_mode);
+      setMock(query.data.mock_mode);
+    }
+  }, [query.data]);
+
+  return query;
 }
 
 export function useQuotes() {

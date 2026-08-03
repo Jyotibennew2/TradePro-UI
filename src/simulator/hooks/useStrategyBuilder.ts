@@ -1,6 +1,6 @@
 import { useSimulatorStore } from "../state/simulatorStore";
 import { StrategyBuilder }   from "../services/strategyBuilder";
-import { STRATEGY_CATALOG }  from "../models/Strategy";
+import type { StrategyType } from "../models/Strategy";
 
 export function useStrategyBuilder() {
   const { underlying, spot, iv, daysToExpiry, riskFreeRate, setLegs, clearLegs } = useSimulatorStore();
@@ -9,7 +9,7 @@ export function useStrategyBuilder() {
   const buildStrategy = (key: string) => {
     if (key === "CUSTOM") { clearLegs(); return; }
     try {
-      const legs = StrategyBuilder.build(key, underlying, effectiveSpot, daysToExpiry, iv, riskFreeRate, 1);
+      const legs = StrategyBuilder.build(key as StrategyType, underlying, effectiveSpot, daysToExpiry, iv, riskFreeRate, 1);
       if (legs.length > 0) setLegs(legs);
     } catch(e) {
       console.error("Strategy build failed:", e);

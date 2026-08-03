@@ -5,11 +5,8 @@
  */
 
 import { PricingEngine }     from "./PricingEngine";
-import { daysToYears }       from "./BlackScholes";
 import type { OptionLeg }    from "../models/Option";
 import type { LegPricing, PortfolioPricing, QuickPriceResult, StrikeLadderRow } from "./PricingEngine";
-
-// ─── Live price snapshot ──────────────────────────────────────────────────────
 
 export interface LiveSnapshot {
   spot         : number;
@@ -18,11 +15,7 @@ export interface LiveSnapshot {
   strikeLadder : StrikeLadderRow[];
 }
 
-// ─── Subscriber callback ──────────────────────────────────────────────────────
-
 type SnapshotCallback = (snapshot: LiveSnapshot) => void;
-
-// ─── Live Pricing Service ─────────────────────────────────────────────────────
 
 export class LivePricingService {
   private _legs       : OptionLeg[]         = [];
@@ -35,8 +28,6 @@ export class LivePricingService {
   private _interval   : ReturnType<typeof setInterval> | null = null;
   private _subscribers: Set<SnapshotCallback> = new Set();
   private _lastSnapshot: LiveSnapshot | null  = null;
-
-  // ── Config ────────────────────────────────────────────────────────────────
 
   configure(config: {
     legs?      : OptionLeg[];
@@ -56,15 +47,11 @@ export class LivePricingService {
     if (config.ladderCount!== undefined) this._ladderCount = config.ladderCount;
   }
 
-  // ── Subscribe / unsubscribe ───────────────────────────────────────────────
-
   subscribe(cb: SnapshotCallback): () => void {
     this._subscribers.add(cb);
     if (this._lastSnapshot) cb(this._lastSnapshot);
     return () => this._subscribers.delete(cb);
   }
-
-  // ── Compute snapshot ──────────────────────────────────────────────────────
 
   private _compute(): LiveSnapshot {
     const spot    = this._spot;
@@ -84,23 +71,17 @@ export class LivePricingService {
     return { spot, timestamp: Date.now(), portfolio, strikeLadder };
   }
 
-  // ── Publish snapshot ──────────────────────────────────────────────────────
-
   private _publish(): void {
     const snapshot       = this._compute();
     this._lastSnapshot   = snapshot;
     this._subscribers.forEach(cb => cb(snapshot));
   }
 
-  // ── Start auto-refresh ────────────────────────────────────────────────────
-
   start(intervalMs: number = 2000): void {
     this.stop();
     this._publish();
     this._interval = setInterval(() => this._publish(), intervalMs);
   }
-
-  // ── Stop ──────────────────────────────────────────────────────────────────
 
   stop(): void {
     if (this._interval) {
@@ -109,14 +90,10 @@ export class LivePricingService {
     }
   }
 
-  // ── Manual refresh ────────────────────────────────────────────────────────
-
   refresh(): LiveSnapshot {
     this._publish();
     return this._lastSnapshot!;
   }
-
-  // ── Quick price ───────────────────────────────────────────────────────────
 
   quickPrice(strike: number): QuickPriceResult {
     return PricingEngine.quickPrice(
@@ -124,13 +101,9 @@ export class LivePricingService {
     );
   }
 
-  // ── Single leg price ──────────────────────────────────────────────────────
-
   priceLeg(leg: OptionLeg): LegPricing {
     return PricingEngine.priceLeg(leg, this._spot, this._r, this._daysLeft);
   }
-
-  // ── Current snapshot ──────────────────────────────────────────────────────
 
   get snapshot(): LiveSnapshot | null {
     return this._lastSnapshot;
@@ -140,7 +113,5 @@ export class LivePricingService {
     return this._interval !== null;
   }
 }
-
-// ─── Singleton ────────────────────────────────────────────────────────────────
 
 export const livePricingService = new LivePricingService();
