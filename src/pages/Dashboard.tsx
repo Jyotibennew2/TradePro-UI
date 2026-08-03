@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { createChart, AreaSeries, type IChartApi, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
+import { createChart, type IChartApi, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
 import { fetchHealth, fetchQuotes, fetchFunds, fetchPortfolio, fetchHistory } from "../utils/api";
 import Card from "../components/ui/Card";
 import Loader from "../components/ui/Loader";
@@ -25,6 +25,9 @@ function StatBox({ label, value, sub, color, theme }: {
  * this chart fabricated fake interpolated points - see PR history). Uses
  * lightweight-charts (TradingView, Apache 2.0) since this is genuine
  * financial time-series data, not decorative.
+ *
+ * NOTE: the installed version (^4.2.1) uses the v4 API - chart.addAreaSeries(options)
+ * directly, not the v5 chart.addSeries(AreaSeries, options) pattern.
  *
  * License requirement: Apache 2.0 permits commercial use but requires a
  * visible attribution back to the project - see the link rendered below
@@ -55,12 +58,12 @@ function EquityCurveChart({ points }: { points: { time: UTCTimestamp; value: num
       handleScroll: false,
       handleScale: false,
     });
-    const series = chart.addSeries(AreaSeries, {
-      lineColor       : theme.accent.cyan,
-      topColor        : theme.accent.cyan + "4D",
-      bottomColor     : theme.accent.cyan + "00",
-      lineWidth       : 2,
-      priceFormat     : { type: "custom", formatter: (v: number) => `₹${v.toLocaleString("en-IN")}` },
+    const series = chart.addAreaSeries({
+      lineColor  : theme.accent.cyan,
+      topColor   : theme.accent.cyan + "4D",
+      bottomColor: theme.accent.cyan + "00",
+      lineWidth  : 2,
+      priceFormat: { type: "custom", formatter: (v: number) => `₹${v.toLocaleString("en-IN")}` },
     });
     chartRef.current = chart;
     seriesRef.current = series;
@@ -99,7 +102,7 @@ function EquityCurveChart({ points }: { points: { time: UTCTimestamp; value: num
 export default function Dashboard() {
   const theme = useTheme();
   const health  = useQuery({ queryKey: ["health"],    queryFn: fetchHealth,    refetchInterval: 10000 });
-  const quotes  = useQuery({ queryKey: ["quotes"],    queryFn: fetchQuotes,    refetchInterval: 3000  });
+  const quotes  = useQuery({ queryKey: ["quotes"],    queryFn: () => fetchQuotes(),    refetchInterval: 3000  });
   const funds   = useQuery({ queryKey: ["funds"],     queryFn: fetchFunds,     refetchInterval: 30000 });
   const paper   = useQuery({ queryKey: ["portfolio"], queryFn: fetchPortfolio, refetchInterval: 5000  });
   const history = useQuery({ queryKey: ["history"],   queryFn: () => fetchHistory(200), refetchInterval: 5000 });
