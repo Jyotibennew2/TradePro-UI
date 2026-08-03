@@ -1,9 +1,10 @@
+import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchHealth, fetchQuotes, fetchFunds, fetchPortfolio } from "../utils/api";
+import { createChart, AreaSeries, type IChartApi, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
+import { fetchHealth, fetchQuotes, fetchFunds, fetchPortfolio, fetchHistory } from "../utils/api";
 import Card from "../components/ui/Card";
 import Loader from "../components/ui/Loader";
-import { TrendingUp, TrendingDown, DollarSign, Activity, Server } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { Server } from "lucide-react";
 import { useTheme } from "../store/themeStore";
 import type { Theme } from "../styles/theme";
 
@@ -19,12 +20,89 @@ function StatBox({ label, value, sub, color, theme }: {
   );
 }
 
+/**
+ * Real equity curve, built from the actual paper-trade history (previously
+ * this chart fabricated fake interpolated points - see PR history). Uses
+ * lightweight-charts (TradingView, Apache 2.0) since this is genuine
+ * financial time-series data, not decorative.
+ *
+ * License requirement: Apache 2.0 permits commercial use but requires a
+ * visible attribution back to the project - see the link rendered below
+ * the chart. Do not remove it.
+ */
+function EquityCurveChart({ points }: { points: { time: UTCTimestamp; value: number }[] }) {
+  const theme = useTheme();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<"Area"> | null>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const chart = createChart(containerRef.current, {
+      height: 140,
+      layout: {
+        background: { color: "transparent" },
+        textColor: theme.text.muted,
+        fontSize: 11,
+      },
+      grid: {
+        vertLines: { visible: false },
+        horzLines: { color: theme.border.subtle },
+      },
+      rightPriceScale: { borderVisible: false },
+      timeScale: { borderVisible: false, timeVisible: true },
+      handleScroll: false,
+      handleScale: false,
+    });
+    const series = chart.addSeries(AreaSeries, {
+      lineColor       : theme.accent.cyan,
+      topColor        : theme.accent.cyan + "4D",
+      bottomColor     : theme.accent.cyan + "00",
+      lineWidth       : 2,
+      priceFormat     : { type: "custom", formatter: (v: number) => `₹${v.toLocaleString("en-IN")}` },
+    });
+    chartRef.current = chart;
+    seriesRef.current = series;
+
+    const handleResize = () => {
+      if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth });
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      chart.remove();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    seriesRef.current?.setData(points);
+    chartRef.current?.timeScale().fitContent();
+  }, [points]);
+
+  return (
+    <div>
+      <div ref={containerRef} style={{ width: "100%" }} />
+      <div className="text-sm mt-1 text-right">
+        <a href="https://www.tradingview.com/lightweight-charts/" target="_blank" rel="noopener noreferrer"
+          style={{ color: theme.text.faint }}>
+          Charts by TradingView Lightweight Charts
+        </a>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const theme = useTheme();
   const health  = useQuery({ queryKey: ["health"],    queryFn: fetchHealth,    refetchInterval: 10000 });
   const quotes  = useQuery({ queryKey: ["quotes"],    queryFn: fetchQuotes,    refetchInterval: 3000  });
   const funds   = useQuery({ queryKey: ["funds"],     queryFn: fetchFunds,     refetchInterval: 30000 });
   const paper   = useQuery({ queryKey: ["portfolio"], queryFn: fetchPortfolio, refetchInterval: 5000  });
+  const history = useQuery({ queryKey: ["history"],   queryFn: () => fetchHistory(200), refetchInterval: 5000 });
 
   const q       = quotes.data?.data ?? {};
   const nifty   = q["NSE:NIFTY50-INDEX"];
@@ -38,14 +116,27 @@ export default function Dashboard() {
 
   const pct = (n?: number) => n != null ? `${n > 0 ? "+" : ""}${n.toFixed(2)}%` : "";
 
-  // Simulated equity curve from paper portfolio
-  const equityCurve = [
-    { t: "9:15",  v: 500000 },
-    { t: "10:00", v: 500000 + (p?.realized_pnl ?? 0) * 0.2 },
-    { t: "11:00", v: 500000 + (p?.realized_pnl ?? 0) * 0.5 },
-    { t: "12:00", v: 500000 + (p?.realized_pnl ?? 0) * 0.8 },
-    { t: "Now",   v: p?.capital ?? 500000 },
-  ];
+  // Real equity curve: starting capital, then cumulative capital after each
+  // CLOSED trade (in chronological order, using the real exit timestamp),
+  // ending at the current live capital figure. No fabricated/interpolated
+  // points - if there's no trade history yet, this is just a flat line at
+  // the starting capital (still real, not fake).
+  const closedTrades = (history.data?.data ?? [])
+    .filter(t => t.exit_time_epoch > 0)
+    .sort((a, b) => a.exit_time_epoch - b.exit_time_epoch);
+
+  const startingCapital = (p?.capital ?? 500000) - (p?.realized_pnl ?? 0);
+  let running = startingCapital;
+  const equityCurve: { time: UTCTimestamp; value: number }[] = closedTrades.map(t => {
+    running += t.pnl;
+    return { time: t.exit_time_epoch as UTCTimestamp, value: Math.round(running) };
+  });
+  // Always end on the live current capital figure (includes unrealized MTM via `capital` on exit only,
+  // so this last point may sit slightly apart from the last trade point if positions are still open)
+  const nowPoint = { time: Math.floor(Date.now() / 1000) as UTCTimestamp, value: Math.round(p?.capital ?? startingCapital) };
+  if (equityCurve.length === 0 || equityCurve[equityCurve.length - 1].time !== nowPoint.time) {
+    equityCurve.push(nowPoint);
+  }
 
   if (quotes.isLoading) return <Loader text="Loading dashboard..." />;
 
@@ -110,26 +201,15 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* Paper P&L chart */}
+      {/* Paper P&L chart - real trade history, not simulated */}
       <Card title="Paper Portfolio">
-        <ResponsiveContainer width="100%" height={120}>
-          <AreaChart data={equityCurve}>
-            <defs>
-              <linearGradient id="pnlGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%"  stopColor={theme.accent.cyan} stopOpacity={0.3} />
-                <stop offset="95%" stopColor={theme.accent.cyan} stopOpacity={0}   />
-              </linearGradient>
-            </defs>
-            <XAxis dataKey="t" tick={{ fill: theme.text.muted, fontSize: 12 }} axisLine={false} tickLine={false} />
-            <YAxis hide />
-            <Tooltip
-              contentStyle={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}`, borderRadius: 8, fontSize: 13 }}
-              labelStyle={{ color: theme.text.muted }}
-              formatter={(v: number) => [`₹${v.toLocaleString("en-IN")}`, "Capital"]}
-            />
-            <Area type="monotone" dataKey="v" stroke={theme.accent.cyan} strokeWidth={2} fill="url(#pnlGrad)" />
-          </AreaChart>
-        </ResponsiveContainer>
+        {closedTrades.length === 0 ? (
+          <div className="text-sm text-center py-6" style={{ color: theme.text.muted }}>
+            No closed trades yet — equity curve will build up as paper trades close.
+          </div>
+        ) : (
+          <EquityCurveChart points={equityCurve} />
+        )}
         <div className="grid grid-cols-3 gap-2 mt-3 text-center text-sm">
           <div>
             <div style={{ color: theme.text.muted }}>Realized</div>
