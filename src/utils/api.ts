@@ -408,8 +408,31 @@ export const fetchScanner = (symbol: string) =>
 export const fetchPortfolio = () =>
   get<{ success: boolean; data: Portfolio }>("/papertrade?action=portfolio");
 
+/** One paper-trade order exactly as PaperOrder.to_dict() serializes it. */
+export interface PaperOrderRecord {
+  order_id        : string;
+  symbol          : string;
+  option_type     : string;
+  strike          : number;
+  expiry          : string;
+  action           : "BUY" | "SELL";
+  qty             : number;
+  entry_price     : number;
+  exit_price      : number;
+  sl              : number;
+  target          : number;
+  status          : "OPEN" | "CLOSED" | "SL_HIT" | "TARGET_HIT";
+  entry_time      : string;   // formatted display string, e.g. "02 Aug 14:30:00"
+  exit_time       : string;   // formatted display string, "" if still open
+  entry_time_epoch: number;   // unix seconds - use this for charts/sorting
+  exit_time_epoch : number;   // unix seconds, 0 if still open
+  pnl             : number;
+  mtm             : number;
+}
+
+/** Last N closed paper trades, most-recent-last (chronological order). */
 export const fetchHistory = (limit = 50) =>
-  get<{ success: boolean; data: unknown[] }>(`/papertrade?action=history&limit=${limit}`);
+  get<{ success: boolean; data: PaperOrderRecord[] }>(`/papertrade?action=history&limit=${limit}`);
 
 export const placePaperOrder = (order: {
   symbol      : string;
