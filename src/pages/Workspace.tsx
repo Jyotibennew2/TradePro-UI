@@ -10,7 +10,7 @@ import { useSimulatorStore, makeOptionLeg } from "../simulator/state/simulatorSt
 import { calculatePayoff } from "../simulator/pricing/PayoffEngine";
 import { bsGreeks, spotRange, daysToYears } from "../simulator/pricing/BlackScholes";
 import type { PortfolioGreeks } from "../simulator/models/Greeks";
-import PayoffChart   from "../simulator/components/PayoffChart";
+import PayoffChart    from "../simulator/components/PayoffChart";
 import GreeksDisplay  from "../simulator/components/GreeksDisplay";
 import LegRow         from "../simulator/components/LegRow";
 import Card           from "../components/ui/Card";
@@ -88,11 +88,21 @@ export default function Workspace() {
     const strike = Math.round(effectiveSpot / 50) * 50;
     addLeg(makeOptionLeg(
       underlying, strike, optType, action, 1,
-      Math.max(bsGreeks({ spot: effectiveSpot, strike, timeToExpiry: T, riskFreeRate: r,
-        volatility: sigmaBase, optionType: optType }).price, 0.05),
+      Math.max(bsGreeks({
+        spot: effectiveSpot, strike, timeToExpiry: T,
+        riskFreeRate: r, volatility: sigmaBase, optionType: optType,
+      }).price, 0.05),
       iv, ""
     ));
   };
+
+  // Defined outside JSX to avoid `as const` inside TSX parser conflict
+  const LEG_BUTTONS: Array<["CE" | "PE", "BUY" | "SELL", string]> = [
+    ["CE", "BUY",  theme.accent.green],
+    ["CE", "SELL", theme.accent.red],
+    ["PE", "BUY",  theme.accent.cyan],
+    ["PE", "SELL", theme.accent.purple],
+  ];
 
   return (
     <div className="flex h-full">
@@ -117,7 +127,7 @@ export default function Workspace() {
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto">
 
-        {/* ── Section 1: Option Chain + Strategy Builder ── */}
+        {/* Section 1: Option Chain + Strategy Builder */}
         <div ref={chainRef} className="p-3 border-b" style={{ borderColor: theme.border.subtle }}>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
 
@@ -134,16 +144,16 @@ export default function Workspace() {
             <div className="min-w-0 space-y-3">
               <Card title="Add Legs">
                 <div className="grid grid-cols-2 gap-2">
-                  {(["CE","BUY",theme.accent.green],["CE","SELL",theme.accent.red],["PE","BUY",theme.accent.cyan],["PE","SELL",theme.accent.purple]] as const).map(
-                    ([type, action, color]) => (
-                      <button key={`${action}-${type}`}
-                        onClick={() => addCustomLeg(type, action)}
-                        className="py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-1"
-                        style={{ background: color + "15", color, border: `1px solid ${color}30` }}>
-                        <Plus size={14} /> {action} {type}
-                      </button>
-                    )
-                  )}
+                  {LEG_BUTTONS.map(([type, action, color]) => (
+                    <button
+                      key={`${action}-${type}`}
+                      onClick={() => addCustomLeg(type, action)}
+                      className="py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-1"
+                      style={{ background: color + "15", color, border: `1px solid ${color}30` }}
+                    >
+                      <Plus size={14} /> {action} {type}
+                    </button>
+                  ))}
                 </div>
               </Card>
 
@@ -176,7 +186,7 @@ export default function Workspace() {
           </div>
         </div>
 
-        {/* ── Section 2: Payoff ── */}
+        {/* Section 2: Payoff */}
         <div ref={payoffRef} className="p-3 border-b" style={{ borderColor: theme.border.subtle }}>
           {payoff ? (
             <Card title="Payoff Diagram">
@@ -190,7 +200,7 @@ export default function Workspace() {
           )}
         </div>
 
-        {/* ── Section 3: Greeks ── */}
+        {/* Section 3: Greeks */}
         <div ref={greeksRef} className="p-3">
           {legs.length > 0 ? (
             <Card title="Portfolio Greeks">
