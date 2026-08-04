@@ -26,7 +26,7 @@ export interface PortfolioSnapshot {
 }
 
 interface LivePortfolioDashboardProps {
-  wsUrl?: string;           // WebSocket endpoint; if omitted, uses mock data
+  wsUrl?: string;
   refreshIntervalMs?: number;
 }
 
@@ -38,7 +38,7 @@ const PnlCell: React.FC<{ value: number; suffix?: string }> = ({ value, suffix =
 
 export const LivePortfolioDashboard: React.FC<LivePortfolioDashboardProps> = ({
   wsUrl,
-  refreshIntervalMs = 5000,
+  refreshIntervalMs: _refreshIntervalMs = 5000,
 }) => {
   const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null);
   const [connected, setConnected] = useState(false);
@@ -46,7 +46,7 @@ export const LivePortfolioDashboard: React.FC<LivePortfolioDashboardProps> = ({
   useEffect(() => {
     if (!wsUrl) return;
     const ws = new WebSocket(wsUrl);
-    ws.onopen = () => setConnected(true);
+    ws.onopen  = () => setConnected(true);
     ws.onclose = () => setConnected(false);
     ws.onmessage = (e) => {
       try { setSnapshot(JSON.parse(e.data)); } catch {}
@@ -55,14 +55,17 @@ export const LivePortfolioDashboard: React.FC<LivePortfolioDashboardProps> = ({
   }, [wsUrl]);
 
   if (!snapshot) {
-    return <div className="portfolio-empty">No portfolio data. Connect a WebSocket or add positions.</div>;
+    return (
+      <div className="portfolio-empty">
+        No portfolio data. Connect a WebSocket or add positions.
+      </div>
+    );
   }
 
   const { positions, summary } = snapshot;
 
   return (
     <div className="live-portfolio">
-      {/* Summary Bar */}
       <div className="portfolio-summary">
         <div className="summary-item">
           <label>Invested</label>
@@ -86,7 +89,6 @@ export const LivePortfolioDashboard: React.FC<LivePortfolioDashboardProps> = ({
         </div>
       </div>
 
-      {/* Positions Table */}
       <table className="positions-table">
         <thead>
           <tr>
