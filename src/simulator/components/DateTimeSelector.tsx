@@ -15,11 +15,18 @@
  * chain.jump — none of which touch legs, Position Book, or any other page
  * state, so the current strategy is always preserved across a date/time
  * change.
+ *
+ * ── Enhancement pass ────────────────────────────────────────────
+ * Calendar day cells now render a small colored dot when that date is
+ * either the selected expiry (auto-detected from real archived data) or a
+ * curated macro event (RBI/Budget/Results, from EVENT_CALENDAR). This is
+ * purely additive to the existing grid — layout, sizing, and every other
+ * interaction are unchanged.
  */
 import { useState, useMemo } from "react";
 import { Calendar, ChevronLeft, ChevronRight, SkipBack, SkipForward } from "lucide-react";
 import { useTheme } from "../../store/themeStore";
-import { TIMEFRAMES } from "../hooks/useHistoricalChain";
+import { TIMEFRAMES, getEventForDate } from "../hooks/useHistoricalChain";
 import type { HistoricalChain } from "../hooks/useHistoricalChain";
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -160,15 +167,28 @@ export default function DateTimeSelector({ chain }: Props) {
               const dStr = `${viewYear}-${String(viewMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
               const has = dateSet.has(dStr);
               const isSelected = dStr === chain.selectedDate;
+              const isExpiry = dStr === chain.expiry;
+              const event = getEventForDate(dStr);
+              const dotColor = isExpiry ? theme.accent.red : event ? theme.accent.orange : null;
               return (
                 <button key={i} disabled={!has} onClick={() => has && pickDate(dStr)}
-                  className="aspect-square rounded-lg text-sm font-bold"
+                  title={event?.label ?? (isExpiry ? "Expiry day" : undefined)}
+                  className="relative aspect-square rounded-lg text-sm font-bold"
                   style={{
                     background: isSelected ? theme.accent.cyan : has ? theme.bg.surface : "transparent",
                     color: isSelected ? theme.bg.page : has ? theme.text.secondary : theme.text.faint,
                     opacity: has ? 1 : 0.3,
                   }}>
                   {day}
+                  {dotColor && (
+                    <span
+                      className="absolute rounded-full"
+                      style={{
+                        width: 4, height: 4, bottom: 3, left: "50%", transform: "translateX(-50%)",
+                        background: isSelected ? theme.bg.page : dotColor,
+                      }}
+                    />
+                  )}
                 </button>
               );
             })}
