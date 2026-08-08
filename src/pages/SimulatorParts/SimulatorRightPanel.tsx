@@ -24,18 +24,39 @@ interface Props {
   handleRollStrike: (leg: OptionLeg) => void;
   removeLeg: (id: string) => void;
   tradeLog: { t: number; text: string }[];
+  livePnL: number | null;
+  isReplaying: boolean;
+}
+
+function fmt(n: number): string {
+  return n.toLocaleString("en-IN", { maximumFractionDigits: 0 });
 }
 
 export default function SimulatorRightPanel({
   theme, payoff, activeLegs, legs, effectiveSpot, showPerLeg, setShowPerLeg,
   margin, portfolioGreeks, pop, scenarioMatrix, adjustments, worstLevel,
-  handleRollStrike, removeLeg, tradeLog,
+  handleRollStrike, removeLeg, tradeLog, livePnL, isReplaying,
 }: Props) {
   return (
     <div className="space-y-3">
       {/* Live Payoff Chart — refreshes automatically, no Calculate needed */}
       <Card title="Live Payoff" extra={
         <div className="flex items-center gap-2">
+          {/* Real-time replay P&L — only shows once a Walk Forward snapshot
+              is loaded and at least one leg has live archived data; updates
+              automatically as the replay Date/Time changes or Auto Play
+              advances, since it's driven by liveOverrides in the calc hook. */}
+          {isReplaying && livePnL != null && (
+            <span className="text-sm px-2 py-0.5 rounded font-bold flex items-center gap-1"
+              title="Real-time P&L at current replay position"
+              style={{
+                background: (livePnL >= 0 ? theme.accent.green : theme.accent.red) + "15",
+                color: livePnL >= 0 ? theme.accent.green : theme.accent.red,
+              }}>
+              <span style={{ width: 6, height: 6, borderRadius: 99, background: livePnL >= 0 ? theme.accent.green : theme.accent.red }} />
+              Live: {livePnL >= 0 ? "+" : ""}₹{fmt(livePnL)}
+            </span>
+          )}
           <LineChartIcon size={13} color={theme.text.muted} />
           <button onClick={() => setShowPerLeg(v => !v)}
             className="text-sm px-2 py-0.5 rounded"
