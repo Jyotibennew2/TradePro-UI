@@ -91,23 +91,27 @@ export function useSimulatorCalculations(params: {
   const sigmaBase = iv / 100;
 
   // ─── Live replay P&L ──────────────────────────────────────────────────────
-  // Real mark-to-market P&L at the Walk Forward replay's current position:
-  // for each active leg with a live archived LTP (liveOverrides), compare
-  // that LTP to the leg's own entry price. Only legs with a live override
-  // count — this is a snapshot of actual replay progress, not a projection,
-  // so it stays null (not zero) whenever no replay data is loaded, and
-  // updates automatically whenever the replay step changes because it's
-  // built directly from liveOverrides.
+  // Real-time mark-to-market P&L, same calculation Position Book already
+  // uses for its "Strategy P&L" total: for each active leg, mark-to-market
+  // price is the live archived LTP when available (liveOverrides), else a
+  // Black-Scholes estimate at the current effectiveSpot — so this stays in
+  // sync with Walk Forward/Auto Play even before a specific chain snapshot
+  // has been loaded, exactly like Position Book's total does. Depends on
+  // effectiveSpot (which itself follows chain.chainMeta.spot during replay)
+  // so it recalculates on every simulated Date/Time step.
   const livePnL = useMemo(() => {
-    const legsWithLiveData = syncedActiveLegs.filter(l => liveOverrides[l.id]);
-    if (!legsWithLiveData.length) return null;
-    return legsWithLiveData.reduce((total, l) => {
-      const liveLtp = liveOverrides[l.id].ltp;
+    if (!syncedActiveLegs.length) return null;
+    return syncedActiveLegs.reduce((total, l) => {
+      const ov = liveOverrides[l.id];
+      const ltp = ov?.ltp ?? bsGreeks({
+        spot: effectiveSpot, strike: l.contract.strike, timeToExpiry: T,
+        riskFreeRate: r, volatility: (ov?.iv ?? l.iv) / 100, optionType: l.contract.optionType,
+      }).price;
       const sign = l.action === "BUY" ? 1 : -1;
       const qty = l.lots * l.contract.lotSize;
-      return total + sign * (liveLtp - l.entryPrice) * qty;
+      return total + sign * (ltp - l.entryPrice) * qty;
     }, 0);
-  }, [syncedActiveLegs, liveOverrides]);
+  }, [syncedActiveLegs, liveOverrides, effectiveSpot, T, r]);
 
   // ─── Calculate ────────────────────────────────────────────────────────────────────────────────
   const calculate = useCallback(() => {
