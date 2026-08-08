@@ -2,7 +2,7 @@
  * TradePro - Options Simulator Page
  *
  * Refactored (structure only) from a single ~700-line file into:
- *   - simulator/hooks/useSimulatorCalculations  (payoff/greeks/margin/scenario/POP/adjustments)
+ *   - simulator/hooks/useSimulatorCalculations  (payoff/greeks/margin/scenario/POP/adjustments/livePnL)
  *   - simulator/hooks/useSimulatorPersistence    (save/load/export/import)
  *   - simulator/hooks/useSimulatorLegActions     (templates/add-leg/drag-reorder/duplicate/expiry-change)
  *   - simulator/hooks/useTradeLog                (session activity log + paper trade)
@@ -14,7 +14,7 @@
  * original section.
  */
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useAppStore } from "../store";
 import { useTheme } from "../store/themeStore";
 import { useSimulatorStore } from "../simulator/state/simulatorStore";
@@ -65,7 +65,7 @@ export default function Simulator() {
 
   const flashToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
-  // ─── Calculations (payoff, greeks, margin, scenario, POP, adjustments) ──
+  // ─── Calculations (payoff, greeks, margin, scenario, POP, adjustments, livePnL) ──
   const calc = useSimulatorCalculations({
     underlying, spot: manualSpot, iv, daysToExpiry, riskFreeRate, legs,
     manualSpot, excludedLegIds, chain, setPayoff, setIsCalculating,
@@ -89,6 +89,24 @@ export default function Simulator() {
     T, r, sigmaBase: iv / 100, legs, addLeg, updateLeg, clearLegs, chain,
     setStratName,
   });
+
+  // Backfill any leg whose contract.expiry is still blank (e.g. legs added
+  // before an Option Chain expiry was ever selected) with the Option
+  // Chain's currently-selected expiry, as soon as one becomes available —
+  // so Position Book's Expiry column, and every downstream Greeks/P&L
+  // calculation that reads leg.contract.expiry directly, never sees a
+  // blank value once a chain expiry exists. Only touches legs that are
+  // actually blank and match the chain's symbol; never overwrites a leg
+  // whose expiry was deliberately set (manually or via handleChangeLegExpiry).
+  useEffect(() => {
+    if (!chain.expiry) return;
+    legs.forEach(l => {
+      if (!l.contract.expiry && l.contract.symbol === chain.symbol) {
+        updateLeg(l.id, { contract: { ...l.contract, expiry: chain.expiry } });
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chain.expiry, chain.symbol, legs]);
 
   // ─── Persistence (save/load/export/import) ──────────────────────────────
   const persistence = useSimulatorPersistence({
@@ -169,6 +187,7 @@ export default function Simulator() {
             margin={margin} portfolioGreeks={portfolioGreeks} pop={pop}
             scenarioMatrix={scenarioMatrix} adjustments={adjustments} worstLevel={worstLevel}
             handleRollStrike={handleRollStrike} removeLeg={removeLeg} tradeLog={tradeLog}
+            livePnL={calc.livePnL} isReplaying={chain.hasData && !!chain.chainMeta}
           />
         </div>
       </div>
