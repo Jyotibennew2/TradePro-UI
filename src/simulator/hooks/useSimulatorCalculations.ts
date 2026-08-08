@@ -90,6 +90,25 @@ export function useSimulatorCalculations(params: {
   const r = riskFreeRate / 100;
   const sigmaBase = iv / 100;
 
+  // ─── Live replay P&L ──────────────────────────────────────────────────────
+  // Real mark-to-market P&L at the Walk Forward replay's current position:
+  // for each active leg with a live archived LTP (liveOverrides), compare
+  // that LTP to the leg's own entry price. Only legs with a live override
+  // count — this is a snapshot of actual replay progress, not a projection,
+  // so it stays null (not zero) whenever no replay data is loaded, and
+  // updates automatically whenever the replay step changes because it's
+  // built directly from liveOverrides.
+  const livePnL = useMemo(() => {
+    const legsWithLiveData = syncedActiveLegs.filter(l => liveOverrides[l.id]);
+    if (!legsWithLiveData.length) return null;
+    return legsWithLiveData.reduce((total, l) => {
+      const liveLtp = liveOverrides[l.id].ltp;
+      const sign = l.action === "BUY" ? 1 : -1;
+      const qty = l.lots * l.contract.lotSize;
+      return total + sign * (liveLtp - l.entryPrice) * qty;
+    }, 0);
+  }, [syncedActiveLegs, liveOverrides]);
+
   // ─── Calculate ────────────────────────────────────────────────────────────────────────────────
   const calculate = useCallback(() => {
     if (!syncedActiveLegs.length) { setPayoff(null); return; }
@@ -190,7 +209,7 @@ export function useSimulatorCalculations(params: {
 
   return {
     activeLegs, liveOverrides, syncedActiveLegs, effectiveSpot,
-    T, r, sigmaBase, calculate,
+    T, r, sigmaBase, calculate, livePnL,
     portfolioGreeks, margin, scenarioMatrix, pop,
     adjustments, worstLevel, handleRollStrike,
   };
