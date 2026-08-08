@@ -2,7 +2,7 @@
  * TradePro - Options Simulator Page
  *
  * Refactored (structure only) from a single ~700-line file into:
- *   - simulator/hooks/useSimulatorCalculations  (payoff/greeks/margin/scenario/POP/adjustments)
+ *   - simulator/hooks/useSimulatorCalculations  (payoff/greeks/margin/scenario/POP/adjustments/livePnL)
  *   - simulator/hooks/useSimulatorPersistence    (save/load/export/import)
  *   - simulator/hooks/useSimulatorLegActions     (templates/add-leg/drag-reorder/duplicate/expiry-change)
  *   - simulator/hooks/useTradeLog                (session activity log + paper trade)
@@ -65,7 +65,7 @@ export default function Simulator() {
 
   const flashToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
-  // ─── Calculations (payoff, greeks, margin, scenario, POP, adjustments) ──
+  // ─── Calculations (payoff, greeks, margin, scenario, POP, adjustments, livePnL) ──
   const calc = useSimulatorCalculations({
     underlying, spot: manualSpot, iv, daysToExpiry, riskFreeRate, legs,
     manualSpot, excludedLegIds, chain, setPayoff, setIsCalculating,
@@ -169,6 +169,7 @@ export default function Simulator() {
             margin={margin} portfolioGreeks={portfolioGreeks} pop={pop}
             scenarioMatrix={scenarioMatrix} adjustments={adjustments} worstLevel={worstLevel}
             handleRollStrike={handleRollStrike} removeLeg={removeLeg} tradeLog={tradeLog}
+            livePnL={calc.livePnL} isReplaying={chain.hasData && !!chain.chainMeta}
           />
         </div>
       </div>
