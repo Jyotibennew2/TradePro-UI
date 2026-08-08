@@ -11,9 +11,9 @@
  * addCustomLeg, drag-reorder, handleSave/Export/Import/Load/Duplicate) is
  * the exact same logic that was already here — none of it was changed.
  *
- * New in this pass: Simulator <-> Historical Option Chain sync. Whenever
- * the chain has a snapshot loaded for the same underlying, the replay
- * position (spot + each matching leg's real archived LTP/IV) feeds
+ * Simulator <-> Historical Option Chain sync (unchanged from prior pass):
+ * Whenever the chain has a snapshot loaded for the same underlying, the
+ * replay position (spot + each matching leg's real archived LTP/IV) feeds
  * Payoff/Margin/Greeks/Scenario/POP/Adjustments on every step — via
  * liveSpot/liveOverrides/syncedActiveLegs, which only change WHAT data is
  * passed into the existing calculatePayoff/calculatePortfolioMargin/
@@ -21,6 +21,19 @@
  * per-leg Expiry Date dropdown (handleChangeLegExpiry) also fetches the
  * real historical entry price for a leg's newly picked expiry, using the
  * existing fetchArchivedChain API.
+ *
+ * ── Enhancement pass (Historical Context + Snapshot Tools) ────────────────
+ * Added to the header strip, next to the Strategy name field:
+ *   - BookmarkControl (⭐ save/recall specific date+time+expiry snapshots)
+ *   - CompareToggle (side-by-side two-snapshot mode)
+ * Added directly under the header, above the Replay Control Bar:
+ *   - ResumeSessionBanner (one-time "resumed last session" toast)
+ * Added directly under the Walk-Forward Bar, above the main workspace:
+ *   - HistoricalContextBar (Date|Time|DTE|Market Status|VIX|IV|PCR|Spot|
+ *     Futures|Gap%|Bias score strip)
+ * None of the pre-existing layout, calculation logic, imports' behavior,
+ * or workflows below were changed — this is additive UI only, matching
+ * the header's existing theme-aware styling conventions.
  *
  * Header also carries a small visible build tag ("build-posbook-guards-1")
  * purely as a deploy-verification aid — if you don't see this tag change
@@ -61,6 +74,8 @@ import OptionChainPanel from "../simulator/components/OptionChainPanel";
 import AnalyticsCards from "../simulator/components/AnalyticsCards";
 import TabbedBottomPanel from "../simulator/components/TabbedBottomPanel";
 import PositionBook from "../simulator/components/PositionBook";
+import HistoricalContextBar from "../simulator/components/HistoricalContextBar";
+import { BookmarkControl, ResumeSessionBanner, CompareToggle } from "../simulator/components/SnapshotTools";
 
 import {
   Plus, Save, Download, Upload, RefreshCw, FolderOpen,
@@ -156,7 +171,7 @@ export default function Simulator() {
 
   const flashToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
-  // ─── Calculate ────────────────────────────────────────────────────────────────────────────────
+  // ─── Calculate ──────────────────────────────────────────────────────────────────────────────
   const calculate = useCallback(() => {
     if (!syncedActiveLegs.length) { setPayoff(null); return; }
     setIsCalculating(true);
@@ -180,7 +195,7 @@ export default function Simulator() {
     calculate();
   }, [syncedActiveLegs, calculate]);
 
-  // ─── Portfolio Greeks ──────────────────────────────────────────────────────────────
+  // ─── Portfolio Greeks ──────────────────────────────────────────────────
   const portfolioGreeks: PortfolioGreeks = syncedActiveLegs.reduce(
     (acc, leg) => {
       const g = bsGreeks({
@@ -205,16 +220,16 @@ export default function Simulator() {
     { netDelta: 0, netGamma: 0, netTheta: 0, netVega: 0, netRho: 0, totalValue: 0 }
   );
 
-  // ─── Margin ─────────────────────────────────────────────────────────────────────────────
+  // ─── Margin ─────────────────────────────────────────────────────────────────────
   const margin = syncedActiveLegs.length ? calculatePortfolioMargin(syncedActiveLegs, effectiveSpot) : null;
 
   // ─── Scenario matrix ────────────────────────────────────────────────────────────────
   const scenarioMatrix = syncedActiveLegs.length ? buildScenarioMatrix(syncedActiveLegs, effectiveSpot, iv, daysToExpiry, r) : null;
 
-  // ─── Probability of Profit ──────────────────────────────────────────────────────────
+  // ─── Probability of Profit ────────────────────────────────────────────────────────────
   const pop = syncedActiveLegs.length ? probabilityOfProfit(syncedActiveLegs, effectiveSpot, iv, daysToExpiry, r) : null;
 
-  // ─── Adjustments ─────────────────────────────────────────────────────────────────────────────
+  // ─── Adjustments ──────────────────────────────────────────────────────────────────────────────
   type ThreatLevel = "safe" | "watch" | "danger";
   const BUFFER_WATCH = 0.03;
   const BUFFER_DANGER = 0.01;
@@ -283,7 +298,7 @@ export default function Simulator() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ─── Add custom leg ──────────────────────────────────────────────────────────────────────
+  // ─── Add custom leg ──────────────────────────────────────────────────────────────────────────────────
   const addCustomLeg = (optType: "CE" | "PE", action: "BUY" | "SELL") => {
     const strike = Math.round(effectiveSpot / 50) * 50;
     addLeg(makeOptionLeg(
@@ -293,7 +308,7 @@ export default function Simulator() {
     ));
   };
 
-  // ─── Drag reorder ──────────────────────────────────────────────────────────────────────────
+  // ─── Drag reorder ──────────────────────────────────────────────────────────────────────────────
   const [dragOver, setDragOver] = useState<number | null>(null);
   const handleDrop = () => {
     if (dragFrom === null || dragOver === null || dragFrom === dragOver) return;
@@ -305,7 +320,7 @@ export default function Simulator() {
     setDragFrom(null); setDragOver(null);
   };
 
-  // ─── Save ───────────────────────────────────────────────────────────────────────────────
+  // ─── Save ──────────────────────────────────────────────────────────────────────────────
   const handleSave = () => {
     if (!legs.length) { setSaveMsg("Add legs first"); setTimeout(() => setSaveMsg(""), 2000); return; }
     const s: BuiltStrategy = {
@@ -354,7 +369,7 @@ export default function Simulator() {
     } catch { setSaveMsg("Invalid file"); setTimeout(() => setSaveMsg(""), 2000); }
   };
 
-  // ─── Load saved ─────────────────────────────────────────────────────────────────────────────
+  // ─── Load saved ──────────────────────────────────────────────────────────────────────────────
   const handleLoad = (s: BuiltStrategy) => {
     clearLegs();
     s.legs.forEach(l => addLeg(l));
@@ -362,7 +377,7 @@ export default function Simulator() {
     setLoadOpen(false);
   };
 
-  // ─── Duplicate leg ─────────────────────────────────────────────────────────────────────────
+  // ─── Duplicate leg ──────────────────────────────────────────────────────────────────────────────
   const handleDuplicate = (leg: OptionLeg) => { addLeg({ ...leg }); };
 
   // ─── Change a leg's expiry date + load its real historical entry price ───
@@ -384,7 +399,7 @@ export default function Simulator() {
     }
   };
 
-  // ─── Trade Log (session-only activity feed, not persisted) ───────────
+  // ─── Trade Log (session-only activity feed, not persisted) ───────
   const [tradeLog, setTradeLog] = useState<{ t: number; text: string }[]>([]);
   const prevLegsRef = useRef<OptionLeg[]>([]);
   useEffect(() => {
@@ -437,7 +452,7 @@ export default function Simulator() {
 
   return (
     <div className="flex flex-col h-full" style={{ background: theme.bg.page }}>
-      {/* ══════════ FIXED HEADER ══════════ */}
+      {/* ═══════════ FIXED HEADER ═══════════ */}
       <div className="flex items-center justify-between gap-3 px-3 py-2 flex-wrap"
         style={{ background: theme.bg.surface, borderBottom: `1px solid ${theme.border.subtle}` }}>
         <div className="flex items-center gap-2 shrink-0">
@@ -453,6 +468,11 @@ export default function Simulator() {
             className="px-2 py-1 rounded-lg text-sm font-bold text-center outline-none"
             style={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}`, color: theme.text.primary, width: 160 }}
           />
+          {/* Snapshot Tools: Bookmark + Compare — sit right next to the
+              Strategy name, so a user can bookmark or compare the exact
+              historical position they're currently naming/saving. */}
+          <BookmarkControl chain={chain} />
+          <CompareToggle chain={chain} />
           <div className="text-sm" style={{ color: theme.text.muted }}>
             <div>Strategy: {bornAt.toLocaleDateString("en-IN")} {bornAt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</div>
           </div>
@@ -516,6 +536,11 @@ export default function Simulator() {
         </div>
       </div>
 
+      {/* One-time "resumed last session" toast — separate from the
+          existing toast/saveMsg strips below so it never gets clobbered
+          by an unrelated Save/AI-Suggest message firing at the same time. */}
+      <ResumeSessionBanner chain={chain} />
+
       {toast && (
         <div className="text-sm text-center py-1" style={{ background: theme.accent.cyan + "10", color: theme.accent.cyan }}>{toast}</div>
       )}
@@ -523,13 +548,20 @@ export default function Simulator() {
         <div className="text-sm text-center py-1" style={{ background: theme.accent.green + "10", color: theme.accent.green }}>{saveMsg}</div>
       )}
 
-      {/* ══════════ REPLAY CONTROL BAR ══════════ */}
+      {/* ═══════════ REPLAY CONTROL BAR ═══════════ */}
       <ReplayControlBar chain={chain} />
 
-      {/* ══════════ WALK FORWARD BAR ══════════ */}
+      {/* ═══════════ WALK FORWARD BAR ═══════════ */}
       <WalkForwardBar chain={chain} />
 
-      {/* ══════════ MAIN WORKSPACE ══════════ */}
+      {/* ═══════════ HISTORICAL CONTEXT BAR ═══════════
+          Date | Time | DTE | Market Status | VIX | ATM IV | PCR | Spot |
+          Futures | Gap% | Bias score — all derived from the same `chain`
+          state already driving Replay/Walk-Forward/Option Chain above, so
+          it always reflects exactly the snapshot currently being viewed. */}
+      <HistoricalContextBar chain={chain} />
+
+      {/* ═══════════ MAIN WORKSPACE ═══════════ */}
       <div className="flex-1 overflow-y-auto p-3 pb-24">
         <div className="grid grid-cols-1 lg:grid-cols-[35%_65%] gap-3 items-start">
 
@@ -672,7 +704,7 @@ export default function Simulator() {
         </div>
       </div>
 
-      {/* ══════════ FIXED BOTTOM ACTION BAR ══════════ */}
+      {/* ═══════════ FIXED BOTTOM ACTION BAR ═══════════ */}
       <div className="fixed bottom-0 left-0 right-0 flex items-center justify-around gap-1 px-2 py-2 z-20 overflow-x-auto"
         style={{ background: theme.bg.surface, borderTop: `1px solid ${theme.border.subtle}` }}>
         <button onClick={calculate} className="flex flex-col items-center gap-0.5 px-2 shrink-0" style={{ color: theme.accent.cyan }}>
