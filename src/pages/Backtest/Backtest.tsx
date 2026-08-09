@@ -6,6 +6,7 @@ import { SYMBOLS, TIMEFRAMES, type Mode } from "./shared";
 import SingleBacktest from "./SingleBacktest";
 import CompareBacktest from "./CompareBacktest";
 import HistoricalData from "./HistoricalData";
+import BatchBacktest from "./BatchBacktest";
 
 export default function Backtest() {
   const theme = useTheme();
@@ -29,46 +30,48 @@ export default function Backtest() {
     <div className="p-4 space-y-4">
       {/* Mode toggle */}
       <div className="flex gap-1">
-        {(["single", "compare", "historical"] as Mode[]).map((m, i) => (
+        {(["single", "compare", "historical", "batch"] as Mode[]).map((m, i) => (
           <button key={m} onClick={() => setMode(m)}
             className="flex-1 py-2 rounded-xl text-sm font-bold"
             style={{ background: mode === m ? theme.accent.cyan : theme.bg.surfaceAlt, color: mode === m ? theme.bg.page : theme.text.muted, border: `1px solid ${theme.border.subtle}` }}>
-            {["Single Backtest", "Compare Strategies", "Historical Data"][i]}
+            {["Single Backtest", "Compare Strategies", "Historical Data", "Batch Backtest"][i]}
           </button>
         ))}
       </div>
 
-      {/* Shared: Symbol + Timeframe */}
-      <Card title="Symbol & Timeframe">
-        <div className="space-y-3">
-          <div>
-            <div className="text-sm mb-1" style={{ color: theme.text.muted }}>Symbol</div>
-            <div className="flex rounded-lg overflow-hidden" style={{ border: `1px solid ${theme.border.subtle}` }}>
-              {SYMBOLS.map(sym => (
-                <button key={sym} onClick={() => setSymbol(sym)}
-                  className="flex-1 py-1.5 text-sm font-bold"
-                  style={{ background: symbol === sym ? theme.accent.cyan : theme.bg.surfaceAlt, color: symbol === sym ? theme.bg.page : theme.text.muted }}>
-                  {sym}
-                </button>
-              ))}
+      {/* Shared: Symbol + Timeframe — not used by Batch (it picks its own multi-select) */}
+      {mode !== "batch" && (
+        <Card title="Symbol & Timeframe">
+          <div className="space-y-3">
+            <div>
+              <div className="text-sm mb-1" style={{ color: theme.text.muted }}>Symbol</div>
+              <div className="flex rounded-lg overflow-hidden" style={{ border: `1px solid ${theme.border.subtle}` }}>
+                {SYMBOLS.map(sym => (
+                  <button key={sym} onClick={() => setSymbol(sym)}
+                    className="flex-1 py-1.5 text-sm font-bold"
+                    style={{ background: symbol === sym ? theme.accent.cyan : theme.bg.surfaceAlt, color: symbol === sym ? theme.bg.page : theme.text.muted }}>
+                    {sym}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="text-sm mb-1" style={{ color: theme.text.muted }}>
+                Timeframe <span style={{ color: theme.text.faint }}>(max {activeTf.maxDays}d lookback)</span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {TIMEFRAMES.map(tf => (
+                  <button key={tf.key} onClick={() => setResolution(tf.key)}
+                    className="px-3 py-1.5 rounded-lg text-sm font-bold"
+                    style={{ background: resolution === tf.key ? theme.accent.purple : theme.bg.surfaceAlt, color: resolution === tf.key ? theme.bg.page : theme.text.muted, border: `1px solid ${theme.border.subtle}` }}>
+                    {tf.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-          <div>
-            <div className="text-sm mb-1" style={{ color: theme.text.muted }}>
-              Timeframe <span style={{ color: theme.text.faint }}>(max {activeTf.maxDays}d lookback)</span>
-            </div>
-            <div className="flex flex-wrap gap-1">
-              {TIMEFRAMES.map(tf => (
-                <button key={tf.key} onClick={() => setResolution(tf.key)}
-                  className="px-3 py-1.5 rounded-lg text-sm font-bold"
-                  style={{ background: resolution === tf.key ? theme.accent.purple : theme.bg.surfaceAlt, color: resolution === tf.key ? theme.bg.page : theme.text.muted, border: `1px solid ${theme.border.subtle}` }}>
-                  {tf.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </Card>
+        </Card>
+      )}
 
       {mode === "single" && (
         <SingleBacktest
@@ -99,6 +102,8 @@ export default function Backtest() {
           maxDays={activeTf.maxDays}
         />
       )}
+
+      {mode === "batch" && <BatchBacktest />}
     </div>
   );
 }

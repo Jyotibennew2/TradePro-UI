@@ -288,6 +288,109 @@ export const runBacktest = (params: {
   lot_size  : number;
 }) => post<BacktestResponse>("/backtest", params);
 
+// ─── Batch Backtest (V1) ───────────────────────────────────────────────────────
+// Sweeps strategies x symbols x timeframes (or, in walkforward mode, symbols x
+// expiries x strikes) via the backend BatchBacktestEngine, which itself calls
+// the SAME run_synthetic_backtest/run_walkforward_backtest functions the
+// single-run and walk-forward endpoints use — no duplicated calculation here.
+export interface BatchGreeksFilter {
+  min_iv?   : number;
+  max_iv?   : number;
+  min_delta?: number;
+  max_delta?: number;
+}
+
+export type BatchRankMetric = "total_pnl" | "roi_pct" | "win_rate" | "max_drawdown" | "profit_factor" | "risk_reward";
+
+export interface BatchJobSummary {
+  total_pnl    : number;
+  roi_pct      : number;
+  win_rate     : number;
+  max_drawdown : number;
+  profit_factor: number;
+  risk_reward  : number;
+}
+
+export interface BatchResultRow {
+  job     : string;
+  kind    : "synthetic" | "walkforward";
+  symbol  : string;
+  strategy?: string;
+  resolution?: string;
+  expiry? : string;
+  summary : BatchJobSummary;
+  rank    : number;
+  stopped_early?: boolean;
+  stop_reason?  : string | null;
+  exit_reason?  : string;
+}
+
+export interface BatchBacktestResponse {
+  success   : boolean;
+  rank_by   : BatchRankMetric;
+  total_jobs: number;
+  ranked    : BatchResultRow[];
+  failed    : { job: string; error: string }[];
+}
+
+/** Multi-strategy / multi-instrument / multi-timeframe sweep. */
+export const runBatchBacktest = (params: {
+  strategies     : string[];
+  symbols        : string[];
+  resolutions?   : Timeframe[];
+  days?          : number;
+  lotSize?       : number;
+  slPct?         : number;
+  tgtPct?        : number;
+  trailingSlPct? : number;
+  greeksFilter?  : BatchGreeksFilter;
+  rankBy?        : BatchRankMetric;
+}) => post<BatchBacktestResponse>("/backtest/batch", {
+  mode            : "synthetic",
+  strategies      : params.strategies,
+  symbols         : params.symbols,
+  resolutions     : params.resolutions ?? ["1d"],
+  days            : params.days ?? 90,
+  lot_size        : params.lotSize ?? 50,
+  sl_pct          : params.slPct ?? 50,
+  tgt_pct         : params.tgtPct ?? 50,
+  trailing_sl_pct : params.trailingSlPct,
+  greeks_filter   : params.greeksFilter,
+  rank_by         : params.rankBy ?? "total_pnl",
+});
+
+/** Multi-expiry / multi-strike sweep against real archived option-chain data. */
+export const runBatchWalkForward = (params: {
+  symbols       : string[];
+  expiries      : string[];
+  strikes       : number[];
+  entryTime     : number;
+  exitTime?     : number;
+  optionType?   : "CE" | "PE";
+  action?       : "BUY" | "SELL";
+  lots?         : number;
+  lotSize?      : number;
+  slPct?        : number;
+  tgtPct?       : number;
+  trailingSlPct?: number;
+  rankBy?       : BatchRankMetric;
+}) => post<BatchBacktestResponse>("/backtest/batch", {
+  mode            : "walkforward",
+  symbols         : params.symbols,
+  expiries        : params.expiries,
+  strikes         : params.strikes,
+  entry_time      : params.entryTime,
+  exit_time       : params.exitTime,
+  option_type     : params.optionType ?? "CE",
+  action          : params.action ?? "BUY",
+  lots            : params.lots ?? 1,
+  lot_size        : params.lotSize ?? 50,
+  sl_pct          : params.slPct ?? 50,
+  tgt_pct         : params.tgtPct ?? 50,
+  trailing_sl_pct : params.trailingSlPct,
+  rank_by         : params.rankBy ?? "total_pnl",
+});
+
 // ─── Historical ──────────────────────────────────────────────────────────────
 export const fetchHistorical = (symbol: string, days = 30, resolution: Timeframe = "1d") =>
   get<{
