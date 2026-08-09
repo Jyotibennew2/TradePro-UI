@@ -25,7 +25,7 @@ export const EXPIRY_PRESETS = [
   { label: "Monthly (30d)", days: 30 },
 ];
 
-export type Mode = "single" | "compare" | "historical";
+export type Mode = "single" | "compare" | "historical" | "batch";
 export type AnyChainRow = HistoricalChainRow | ArchivedChainRow;
 
 export function StatBox({ label, value, color, theme }: { label: string; value: string; color: string; theme: Theme }) {
