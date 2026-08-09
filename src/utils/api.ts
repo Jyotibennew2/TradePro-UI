@@ -288,11 +288,12 @@ export const runBacktest = (params: {
   lot_size  : number;
 }) => post<BacktestResponse>("/backtest", params);
 
-// ─── Batch Backtest (V1) ───────────────────────────────────────────────────────
-// Sweeps strategies x symbols x timeframes (or, in walkforward mode, symbols x
-// expiries x strikes) via the backend BatchBacktestEngine, which itself calls
-// the SAME run_synthetic_backtest/run_walkforward_backtest functions the
-// single-run and walk-forward endpoints use — no duplicated calculation here.
+// ─── Batch Backtest (V1 + Real-Data Multi-Leg Sweep) ───────────────────────────
+// Sweeps strategies x symbols x timeframes (or, in walkforward mode, strategies
+// x symbols x expiries x strikes against REAL archived option-chain data) via
+// the backend BatchBacktestEngine, which itself calls the SAME
+// run_synthetic_backtest/run_walkforward_backtest functions the single-run
+// and walk-forward endpoints use — no duplicated calculation here.
 export interface BatchGreeksFilter {
   min_iv?   : number;
   max_iv?   : number;
@@ -318,6 +319,7 @@ export interface BatchResultRow {
   strategy?: string;
   resolution?: string;
   expiry? : string;
+  legs?   : WalkForwardLeg[];
   summary : BatchJobSummary;
   rank    : number;
   stopped_early?: boolean;
@@ -359,13 +361,27 @@ export const runBatchBacktest = (params: {
   rank_by         : params.rankBy ?? "total_pnl",
 });
 
-/** Multi-expiry / multi-strike sweep against real archived option-chain data. */
+/**
+ * Multi-instrument / multi-expiry / multi-strike sweep against REAL archived
+ * option-chain data (not Black-Scholes).
+ *
+ * Pass `strategies` to replay actual multi-leg strategies (straddle/strangle/
+ * ironCondor/longCall/longPut) — each `strikes` entry is treated as the ATM
+ * anchor for that job and the strategy's real legs are built around it
+ * server-side (backend/routes/backtest.py: strategy_leg_offsets()). Every
+ * job is scoped to exactly one symbol + one expiry, so strikes/expiries are
+ * never mixed across instruments.
+ *
+ * Omit `strategies` to fall back to the original single naked-leg sweep
+ * (optionType/action apply in that case only).
+ */
 export const runBatchWalkForward = (params: {
   symbols       : string[];
   expiries      : string[];
   strikes       : number[];
   entryTime     : number;
   exitTime?     : number;
+  strategies?   : string[];
   optionType?   : "CE" | "PE";
   action?       : "BUY" | "SELL";
   lots?         : number;
@@ -381,6 +397,7 @@ export const runBatchWalkForward = (params: {
   strikes         : params.strikes,
   entry_time      : params.entryTime,
   exit_time       : params.exitTime,
+  strategies      : params.strategies,
   option_type     : params.optionType ?? "CE",
   action          : params.action ?? "BUY",
   lots            : params.lots ?? 1,
