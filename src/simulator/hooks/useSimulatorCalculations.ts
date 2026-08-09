@@ -56,14 +56,20 @@ export function useSimulatorCalculations(params: {
   const effectiveSpot = liveSpot ?? manualSpot;
 
   // Live per-leg LTP + IV from the real archived snapshot at the current
-  // replay position — only for legs whose own expiry matches the expiry
+  // replay position — for legs whose own expiry matches the expiry
   // currently browsed in the Historical Option Chain (that's the only
-  // expiry whose data is loaded client-side at any moment).
+  // expiry whose data is loaded client-side at any moment), OR for legs
+  // that don't have an expiry set at all yet — those are treated as
+  // belonging to the currently-selected chain expiry by default, so a
+  // freshly-added leg (or a leg added before any option chain was loaded)
+  // still gets real prices/Greeks from the moment a chain is loaded,
+  // instead of silently sitting on a Black-Scholes estimate forever.
   const liveOverrides = useMemo(() => {
     const map: Record<string, { ltp: number; iv: number }> = {};
     if (chain.chainData && chain.expiry) {
       for (const l of legs) {
-        if (l.contract.symbol !== chain.symbol || l.contract.expiry !== chain.expiry) continue;
+        if (l.contract.symbol !== chain.symbol) continue;
+        if (l.contract.expiry && l.contract.expiry !== chain.expiry) continue;
         const row = chain.chainData.find((r: any) => r.strike === l.contract.strike);
         if (!row) continue;
         const ltp = l.contract.optionType === "CE" ? row.ce_ltp : row.pe_ltp;
@@ -75,20 +81,53 @@ export function useSimulatorCalculations(params: {
   }, [legs, chain.chainData, chain.expiry, chain.symbol]);
 
   // The leg set actually fed into Payoff/Margin/Greeks/Scenario/POP/
-  // Adjustments below: activeLegs (ticked in Position Book) with IV
-  // replaced by the live archived IV where available. entryPrice (cost
-  // basis) is never touched — only the live mark inputs are synced.
+  // Adjustments below, and into Position Book's display: activeLegs
+  // (ticked in Position Book) with IV replaced by the live archived IV
+  // where available, AND with a blank contract.expiry filled in from the
+  // Option Chain panel's currently-selected expiry — a leg's expiry
+  // should never render blank once a chain is loaded. entryPrice (cost
+  // basis) is never touched — only the live mark inputs and the expiry
+  // label are synced.
   const syncedActiveLegs = useMemo(
     () => activeLegs.map(l => {
       const ov = liveOverrides[l.id];
-      return ov ? { ...l, iv: ov.iv } : l;
+      const needsExpiry = !l.contract.expiry && chain.expiry && l.contract.symbol === chain.symbol;
+      if (!ov && !needsExpiry) return l;
+      return {
+        ...l,
+        ...(ov ? { iv: ov.iv } : {}),
+        contract: needsExpiry ? { ...l.contract, expiry: chain.expiry } : l.contract,
+      };
     }),
-    [activeLegs, liveOverrides]
+    [activeLegs, liveOverrides, chain.expiry, chain.symbol]
   );
 
   const T = daysToYears(daysToExpiry);
   const r = riskFreeRate / 100;
   const sigmaBase = iv / 100;
+
+  // ─── Live replay P&L ──────────────────────────────────────────────────────
+  // Real-time mark-to-market P&L, same calculation Position Book already
+  // uses for its "Strategy P&L" total: for each active leg, mark-to-market
+  // price is the live archived LTP when available (liveOverrides), else a
+  // Black-Scholes estimate at the current effectiveSpot — so this stays in
+  // sync with Walk Forward/Auto Play even before a specific chain snapshot
+  // has been loaded, exactly like Position Book's total does. Depends on
+  // effectiveSpot (which itself follows chain.chainMeta.spot during replay)
+  // so it recalculates on every simulated Date/Time step.
+  const livePnL = useMemo(() => {
+    if (!syncedActiveLegs.length) return null;
+    return syncedActiveLegs.reduce((total, l) => {
+      const ov = liveOverrides[l.id];
+      const ltp = ov?.ltp ?? bsGreeks({
+        spot: effectiveSpot, strike: l.contract.strike, timeToExpiry: T,
+        riskFreeRate: r, volatility: (ov?.iv ?? l.iv) / 100, optionType: l.contract.optionType,
+      }).price;
+      const sign = l.action === "BUY" ? 1 : -1;
+      const qty = l.lots * l.contract.lotSize;
+      return total + sign * (ltp - l.entryPrice) * qty;
+    }, 0);
+  }, [syncedActiveLegs, liveOverrides, effectiveSpot, T, r]);
 
   // ─── Calculate ────────────────────────────────────────────────────────────────────────────────
   const calculate = useCallback(() => {
@@ -190,7 +229,7 @@ export function useSimulatorCalculations(params: {
 
   return {
     activeLegs, liveOverrides, syncedActiveLegs, effectiveSpot,
-    T, r, sigmaBase, calculate,
+    T, r, sigmaBase, calculate, livePnL,
     portfolioGreeks, margin, scenarioMatrix, pop,
     adjustments, worstLevel, handleRollStrike,
   };

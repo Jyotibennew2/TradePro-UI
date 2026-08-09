@@ -35,13 +35,21 @@ export function useSimulatorLegActions(params: {
 
   const [template, setTemplate] = useState("CUSTOM");
 
+  // Expiry to stamp on newly-created legs: the expiry currently selected in
+  // the Option Chain panel when one is loaded, else empty (falls back to
+  // "nearest weekly" wherever the leg's expiry is later used). This is the
+  // single source of truth for "what expiry are new legs" — both the
+  // template builder and the manual Add Leg buttons read it below, so a
+  // leg's expiry is never silently blank when a chain is loaded.
+  const selectedExpiry = chain.expiry || "";
+
   const handleTemplate = (key: string) => {
     setTemplate(key);
     const st = useSimulatorStore.getState();
     if (key === "CUSTOM") { st.clearLegs(); return; }
     try {
       const s = effectiveSpot > 0 ? effectiveSpot : 24300;
-      const built = StrategyBuilder.build(key as any, underlying, s, daysToExpiry, iv, riskFreeRate, 1);
+      const built = StrategyBuilder.build(key as any, underlying, s, daysToExpiry, iv, riskFreeRate, 1, selectedExpiry);
       if (built.length > 0) {
         st.setLegs(built);
         const name = STRATEGY_CATALOG[key as keyof typeof STRATEGY_CATALOG]?.name ?? key;
@@ -70,7 +78,7 @@ export function useSimulatorLegActions(params: {
     addLeg(makeOptionLeg(
       underlying, strike, optType, action, 1,
       Math.max(bsGreeks({ spot: effectiveSpot, strike, timeToExpiry: T, riskFreeRate: r, volatility: sigmaBase, optionType: optType }).price, 0.05),
-      iv, ""
+      iv, selectedExpiry
     ));
   };
 
