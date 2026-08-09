@@ -2,7 +2,9 @@ import { Save, Download, Upload, FolderOpen, Sparkles, Settings, Zap } from "luc
 import type { ChangeEvent } from "react";
 import type { Theme } from "../../styles/theme";
 import type { BuiltStrategy } from "../../simulator/models/Strategy";
+import type { HistoricalChain } from "../../simulator/hooks/useHistoricalChain";
 import { strategyStorage } from "../../simulator/services/strategyStorage";
+import { BookmarkControl, CompareToggle } from "../../simulator/components/SnapshotTools";
 
 interface Props {
   theme: Theme;
@@ -19,11 +21,13 @@ interface Props {
   setSavedList: (s: BuiltStrategy[]) => void;
   handleLoad: (s: BuiltStrategy) => void;
   handleImport: (e: ChangeEvent<HTMLInputElement>) => void;
+  chain: HistoricalChain;
 }
 
 export default function SimulatorHeader({
   theme, stratName, setStratName, bornAt, deployLabel, handleSave,
   loadOpen, setLoadOpen, handleExport, flashToast, savedList, setSavedList, handleLoad, handleImport,
+  chain,
 }: Props) {
   return (
     <div className="flex items-center justify-between gap-3 px-3 py-2 flex-wrap"
@@ -41,6 +45,11 @@ export default function SimulatorHeader({
           className="px-2 py-1 rounded-lg text-sm font-bold text-center outline-none"
           style={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}`, color: theme.text.primary, width: 160 }}
         />
+        {/* Snapshot Tools: Bookmark + Compare — sit right next to the
+            Strategy name, so a user can bookmark or compare the exact
+            historical position they're currently naming/saving. */}
+        <BookmarkControl chain={chain} />
+        <CompareToggle chain={chain} />
         <div className="text-sm" style={{ color: theme.text.muted }}>
           <div>Strategy: {bornAt.toLocaleDateString("en-IN")} {bornAt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</div>
         </div>
