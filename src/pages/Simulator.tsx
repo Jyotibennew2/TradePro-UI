@@ -12,6 +12,17 @@
  * same logic that was already in the single-file version — nothing was
  * changed, only moved. See each hook/part file for the corresponding
  * original section.
+ *
+ * ── Enhancement pass (Historical Context + Snapshot Tools) ────────────────
+ * Added to the header strip (inside SimulatorHeader), next to the Strategy
+ * name field: BookmarkControl (⭐ save/recall specific date+time+expiry
+ * snapshots) and CompareToggle (side-by-side two-snapshot mode).
+ * Added directly under the header, above the Replay Control Bar:
+ * ResumeSessionBanner (one-time "resumed last session" toast).
+ * Added directly under the Walk-Forward Bar, above the main workspace:
+ * HistoricalContextBar (Date|Time|DTE|Market Status|VIX|IV|PCR|Spot|
+ * Futures|Gap%|Bias score strip). None of the pre-existing layout,
+ * calculation logic, or workflows were changed — this is additive UI only.
  */
 
 import { useState, useRef, useEffect } from "react";
@@ -26,6 +37,8 @@ import ReplayControlBar from "../simulator/components/ReplayControlBar";
 import WalkForwardBar from "../simulator/components/WalkForwardBar";
 import OptionChainPanel from "../simulator/components/OptionChainPanel";
 import PositionBook from "../simulator/components/PositionBook";
+import HistoricalContextBar from "../simulator/components/HistoricalContextBar";
+import { ResumeSessionBanner } from "../simulator/components/SnapshotTools";
 
 import { useSimulatorCalculations } from "../simulator/hooks/useSimulatorCalculations";
 import { useSimulatorPersistence } from "../simulator/hooks/useSimulatorPersistence";
@@ -137,7 +150,13 @@ export default function Simulator() {
         handleExport={persistence.handleExport} flashToast={flashToast}
         savedList={persistence.savedList} setSavedList={persistence.setSavedList}
         handleLoad={persistence.handleLoad} handleImport={persistence.handleImport}
+        chain={chain}
       />
+
+      {/* One-time "resumed last session" toast — separate from the
+          existing toast/saveMsg strips below so it never gets clobbered
+          by an unrelated Save/AI-Suggest message firing at the same time. */}
+      <ResumeSessionBanner chain={chain} />
 
       {toast && (
         <div className="text-sm text-center py-1" style={{ background: theme.accent.cyan + "10", color: theme.accent.cyan }}>{toast}</div>
@@ -151,6 +170,13 @@ export default function Simulator() {
 
       {/* ══════════ WALK FORWARD BAR ══════════ */}
       <WalkForwardBar chain={chain} />
+
+      {/* ══════════ HISTORICAL CONTEXT BAR ══════════
+          Date | Time | DTE | Market Status | VIX | ATM IV | PCR | Spot |
+          Futures | Gap% | Bias score — all derived from the same `chain`
+          state already driving Replay/Walk-Forward/Option Chain above, so
+          it always reflects exactly the snapshot currently being viewed. */}
+      <HistoricalContextBar chain={chain} />
 
       {/* ══════════ MAIN WORKSPACE ══════════ */}
       <div className="flex-1 overflow-y-auto p-3 pb-24">
