@@ -125,7 +125,11 @@ export function useSimulatorCalculations(params: {
       }).price;
       const sign = l.action === "BUY" ? 1 : -1;
       const qty = l.lots * l.contract.lotSize;
-      return total + sign * (ltp - l.entryPrice) * qty;
+      // Include any already-realized P&L from partial exits taken on this
+      // leg (Position Book's Exit Qty control), so the header badge always
+      // matches Position Book's "Strategy P&L" total exactly.
+      const unrealized = sign * (ltp - l.entryPrice) * qty;
+      return total + unrealized + (l.realizedPnl ?? 0);
     }, 0);
   }, [syncedActiveLegs, liveOverrides, effectiveSpot, T, r]);
 

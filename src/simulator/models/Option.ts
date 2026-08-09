@@ -29,6 +29,11 @@ export interface OptionLeg {
   currentPrice: number;
   iv          : number;          // implied volatility %
   isActive    : boolean;
+  // Cumulative realized P&L (₹) from partial exits already taken on this
+  // leg. Undefined/0 means nothing has been partially exited yet — the
+  // leg's full remaining `lots` are still open. Set by Position Book's
+  // partial-exit action; never touched by any pricing/Greeks calculation.
+  realizedPnl?: number;
 }
 
 // ─── Option Quote ─────────────────────────────────────────────────────────────

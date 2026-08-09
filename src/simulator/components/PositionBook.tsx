@@ -1,8 +1,20 @@
 /**
  * TradePro Simulator - Position Book (floating panel, fully editable)
+ *
+ * ── Partial Exit pass ──────────────────────────────────────────────────
+ * Each row now has a small "Exit Qty" lots input next to the existing full
+ * Exit (✕) button. Entering a number and confirming exits only that many
+ * lots at the leg's current LTP: entryPrice/avg price is untouched (exits
+ * are FIFO-at-average, not a new cost basis), `lots` is reduced by the
+ * exited amount, and the P&L from that slice is added to the leg's
+ * cumulative `realizedPnl`. Exiting the full remaining quantity (or more)
+ * behaves exactly like the pre-existing full Exit button — the leg is
+ * removed. Nothing about Strike/Type/Action/Entry Price/Expiry editing,
+ * live Greeks/MTM, or the Strategy/Payoff sync (Position Book checkbox)
+ * changed — this is additive.
  */
 import { useState, useRef, useCallback } from "react";
-import { ChevronDown, ChevronUp, X, GripHorizontal, Briefcase, Plus, Minus } from "lucide-react";
+import { ChevronDown, ChevronUp, X, GripHorizontal, Briefcase, Plus, Minus, LogOut } from "lucide-react";
 import { useTheme } from "../../store/themeStore";
 import { bsGreeks } from "../pricing/BlackScholes";
 import type { OptionLeg } from "../models/Option";
@@ -41,6 +53,7 @@ export default function PositionBook({
   const [collapsed, setCollapsed] = useState(true);
   const [height, setHeight] = useState(DEFAULT_H);
   const [slTgt, setSlTgt] = useState<Record<string, { sl: string; target: string; mode: "pt" | "pct" }>>({});
+  const [exitQty, setExitQty] = useState<Record<string, string>>({});
   const dragRef = useRef<{ startY: number; startH: number } | null>(null);
 
   const safeLiveOverrides    = liveOverrides    ?? {};
@@ -82,21 +95,51 @@ export default function PositionBook({
     const ltp  = ov?.ltp ?? g.price;
     const qty  = leg.lots * (leg.contract.lotSize ?? 1);
     const sign = leg.action === "BUY" ? 1 : -1;
-    const mtm  = (ltp - leg.entryPrice) * qty * sign;
+    const unrealizedMtm = (ltp - leg.entryPrice) * qty * sign;
+    const realizedMtm   = leg.realizedPnl ?? 0;
     return {
-      leg, ltp, mtm, qty, isLive: ov != null,
+      leg, ltp, unrealizedMtm, realizedMtm, mtm: unrealizedMtm + realizedMtm, qty, isLive: ov != null,
       deltaPos: sign * g.delta * qty,
       thetaPos: sign * g.theta * qty,
     };
   });
 
-  const totalMtm   = rows.reduce((s, r) => s + r.mtm,      0);
+  const totalMtm        = rows.reduce((s, r) => s + r.mtm,           0);
+  const totalRealized   = rows.reduce((s, r) => s + r.realizedMtm,   0);
+  const totalUnrealized = rows.reduce((s, r) => s + r.unrealizedMtm, 0);
   const totalQty   = rows.reduce((s, r) => s + r.qty,      0);
   const totalDelta = rows.reduce((s, r) => s + r.deltaPos, 0);
   const totalTheta = rows.reduce((s, r) => s + r.thetaPos, 0);
 
   const instrOptions = (optType: "CE" | "PE") =>
     safeInstrumentOptions.map(o => ({ value: `${o.strike}|${optType}`, label: `${o.strike} ${optType}` }));
+
+  // Exit `qtyLots` lots from `leg` at its current live/estimated LTP:
+  // - qtyLots >= leg.lots (or invalid input) exits the whole leg, same as
+  //   the pre-existing full Exit button.
+  // - Otherwise, the P&L on just that slice is realized (added to
+  //   leg.realizedPnl), remaining lots shrink, entryPrice is untouched.
+  const handlePartialExit = (leg: OptionLeg, ltp: number) => {
+    const raw = exitQty[leg.id];
+    const qtyLots = Number(raw);
+    if (!raw || !Number.isFinite(qtyLots) || qtyLots <= 0) return;
+
+    if (qtyLots >= leg.lots) {
+      onExit(leg.id);
+      setExitQty(m => { const next = { ...m }; delete next[leg.id]; return next; });
+      return;
+    }
+
+    const sign = leg.action === "BUY" ? 1 : -1;
+    const exitedQtyUnits = qtyLots * (leg.contract.lotSize ?? 1);
+    const sliceRealized = (ltp - leg.entryPrice) * exitedQtyUnits * sign;
+
+    onUpdate(leg.id, {
+      lots: leg.lots - qtyLots,
+      realizedPnl: (leg.realizedPnl ?? 0) + sliceRealized,
+    });
+    setExitQty(m => { const next = { ...m }; delete next[leg.id]; return next; });
+  };
 
   if (collapsed) {
     return (
@@ -163,7 +206,7 @@ export default function PositionBook({
           <table className="w-full" style={{ fontSize: 11, borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ position: "sticky", top: 0, background: theme.bg.surfaceAlt, zIndex: 1 }}>
-                {["", "Instrument", "Expiry", "Action", "Lots", "Avg Price", "LTP", "MTM", "Realized", "Unrealized", "Greeks (Δ/Θ)", "SL", "Target", "Status", ""].map(h => (
+                {["", "Instrument", "Expiry", "Action", "Lots", "Avg Price", "LTP", "MTM", "Realized", "Unrealized", "Greeks (Δ/Θ)", "SL", "Target", "Status", "Exit Qty", ""].map(h => (
                   <th key={h} className="px-2 py-1.5 text-left whitespace-nowrap"
                     style={{ color: theme.text.faint, fontWeight: 700, borderBottom: `1px solid ${theme.border.subtle}` }}>
                     {h}
@@ -172,11 +215,12 @@ export default function PositionBook({
               </tr>
             </thead>
             <tbody>
-              {rows.map(({ leg, ltp, mtm, deltaPos, thetaPos, isLive }) => {
+              {rows.map(({ leg, ltp, mtm, unrealizedMtm, realizedMtm, deltaPos, thetaPos, isLive }) => {
                 const st    = getSlTgt(leg.id);
                 const isBuy = leg.action === "BUY";
                 const active = !safeExcludedIds.has(leg.id);
                 const slOpts = (st.mode === "pt" ? SL_TGT_POINTS : SL_TGT_PCT).map(n => ({ value: String(n), label: st.mode === "pt" ? `${n} pt` : `${n}%` }));
+                const exitVal = exitQty[leg.id] ?? "";
 
                 return (
                   <tr key={leg.id} style={{ borderBottom: `1px solid ${theme.border.subtle}`, opacity: active ? 1 : 0.45 }}>
@@ -233,9 +277,11 @@ export default function PositionBook({
                     <td className="px-2 py-1.5 font-bold" style={{ color: mtm >= 0 ? theme.accent.green : theme.accent.red }}>
                       {mtm >= 0 ? "+" : ""}₹{Math.round(mtm).toLocaleString("en-IN")}
                     </td>
-                    <td className="px-2 py-1.5" style={{ color: theme.text.faint }}>—</td>
-                    <td className="px-2 py-1.5 font-bold" style={{ color: mtm >= 0 ? theme.accent.green : theme.accent.red }}>
-                      {mtm >= 0 ? "+" : ""}₹{Math.round(mtm).toLocaleString("en-IN")}
+                    <td className="px-2 py-1.5 font-bold" style={{ color: realizedMtm === 0 ? theme.text.faint : realizedMtm > 0 ? theme.accent.green : theme.accent.red }}>
+                      {realizedMtm === 0 ? "—" : `${realizedMtm >= 0 ? "+" : ""}₹${Math.round(realizedMtm).toLocaleString("en-IN")}`}
+                    </td>
+                    <td className="px-2 py-1.5 font-bold" style={{ color: unrealizedMtm >= 0 ? theme.accent.green : theme.accent.red }}>
+                      {unrealizedMtm >= 0 ? "+" : ""}₹{Math.round(unrealizedMtm).toLocaleString("en-IN")}
                     </td>
                     <td className="px-2 py-1.5 whitespace-nowrap" style={{ color: theme.text.faint }}>
                       {deltaPos.toFixed(1)} / {thetaPos.toFixed(1)}
@@ -252,8 +298,29 @@ export default function PositionBook({
                     <td className="px-2 py-1.5">
                       <span className="px-1.5 py-0.5 rounded font-bold" style={{ color: theme.accent.cyan, background: theme.accent.cyan + "18" }}>OPEN</span>
                     </td>
+                    <td className="px-1 py-1.5">
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number" min={1} max={leg.lots} step={1}
+                          value={exitVal}
+                          placeholder={`/${leg.lots}`}
+                          onChange={e => setExitQty(m => ({ ...m, [leg.id]: e.target.value }))}
+                          title={`Lots to exit (out of ${leg.lots} open)`}
+                          className="w-12 px-1 py-0.5 rounded text-center outline-none font-bold"
+                          style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.text.secondary }}
+                        />
+                        <button
+                          onClick={() => handlePartialExit(leg, ltp)}
+                          disabled={!exitVal}
+                          title="Exit these lots at current LTP"
+                          className="p-1 rounded"
+                          style={{ color: theme.accent.orange, background: theme.accent.orange + "15", opacity: exitVal ? 1 : 0.4 }}>
+                          <LogOut size={12} />
+                        </button>
+                      </div>
+                    </td>
                     <td className="px-2 py-1.5">
-                      <button onClick={() => onExit(leg.id)} className="p-1 rounded" style={{ color: theme.accent.red, background: theme.accent.red + "15" }}><X size={13} /></button>
+                      <button onClick={() => onExit(leg.id)} title="Exit full position" className="p-1 rounded" style={{ color: theme.accent.red, background: theme.accent.red + "15" }}><X size={13} /></button>
                     </td>
                   </tr>
                 );
@@ -270,6 +337,7 @@ export default function PositionBook({
             { label: "Total Qty",   value: String(totalQty),            color: theme.text.secondary },
             { label: "Total Delta", value: totalDelta.toFixed(1),        color: theme.text.secondary },
             { label: "Total Theta", value: totalTheta.toFixed(1),        color: theme.text.secondary },
+            { label: "Realized",    value: `${totalRealized >= 0 ? "+" : ""}₹${Math.round(totalRealized).toLocaleString("en-IN")}`, color: totalRealized === 0 ? theme.text.secondary : totalRealized > 0 ? theme.accent.green : theme.accent.red },
           ].map(({ label, value, color }) => (
             <div key={label} className="text-center">
               <div style={{ fontSize: 9, color: theme.text.faint }}>{label}</div>
