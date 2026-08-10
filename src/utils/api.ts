@@ -328,11 +328,14 @@ export interface BatchResultRow {
 }
 
 export interface BatchBacktestResponse {
-  success   : boolean;
-  rank_by   : BatchRankMetric;
-  total_jobs: number;
-  ranked    : BatchResultRow[];
-  failed    : { job: string; error: string }[];
+  success        : boolean;
+  rank_by        : BatchRankMetric;
+  /** Raw combination count BEFORE the backend's MAX_JOBS cap was applied. */
+  requested_jobs : number;
+  /** Combos actually executed — equal to requested_jobs unless capped. */
+  total_jobs     : number;
+  ranked         : BatchResultRow[];
+  failed         : { job: string; error: string }[];
 }
 
 /** Multi-strategy / multi-instrument / multi-timeframe sweep. */
