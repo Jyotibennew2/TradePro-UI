@@ -51,6 +51,10 @@ export default function BatchBacktest() {
   const [result, setResult]   = useState<BatchResultRow[] | null>(null);
   const [dataSource, setDataSource] = useState<"LIVE" | "MOCK" | undefined>();
   const [failedCount, setFailedCount] = useState(0);
+  // requested_jobs = raw combo count before the backend's MAX_JOBS cap;
+  // executedJobs = total_jobs actually run (== requested unless capped).
+  const [requestedJobs, setRequestedJobs] = useState<number | null>(null);
+  const [executedJobs,  setExecutedJobs]  = useState<number | null>(null);
   const [running, setRunning] = useState(false);
   const [errored, setErrored] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -84,6 +88,8 @@ export default function BatchBacktest() {
       });
       setResult(res.ranked);
       setFailedCount(res.failed?.length ?? 0);
+      setRequestedJobs(res.requested_jobs);
+      setExecutedJobs(res.total_jobs);
       // data_source isn't on the batch response (it's per-job); intentionally
       // omitted at aggregate level to avoid implying one uniform source
       // across a mixed sweep.
@@ -151,6 +157,8 @@ export default function BatchBacktest() {
       });
       setResult(res.ranked);
       setFailedCount(res.failed?.length ?? 0);
+      setRequestedJobs(res.requested_jobs);
+      setExecutedJobs(res.total_jobs);
       setDataSource(undefined);
     } catch (e: any) {
       setErrored(true);
@@ -403,6 +411,12 @@ export default function BatchBacktest() {
 
       {result && (
         <>
+          {requestedJobs !== null && executedJobs !== null && (
+            <div className="text-sm" style={{ color: executedJobs < requestedJobs ? theme.accent.orange : theme.text.muted }}>
+              Executed {executedJobs} of {requestedJobs} requested combos
+              {executedJobs < requestedJobs ? " (capped at MAX_JOBS)" : ""}
+            </div>
+          )}
           <div className="flex justify-between items-center">
             <div className="text-sm" style={{ color: theme.text.muted }}>
               {result.length} ranked{failedCount > 0 ? `, ${failedCount} failed (missing data for that combo)` : ""}
