@@ -15,6 +15,16 @@
  * last-session, compare-snapshot mode, market phase, DTE, PCR, and gap%.
  * None of the pre-existing exported fields were renamed, removed, or had
  * their computed values changed — this pass only adds new ones alongside.
+ *
+ * ── Bugfix pass (stuck replay across date boundaries) ──────────────────
+ * jump() and the times-fetch effect below both wanted to control timeIdx
+ * whenever a forward/backward step crossed into a new day: jump() set an
+ * intended timeIdx, but the times-fetch effect's closest-time-match logic
+ * (meant for manual date-picker changes) fired right after and snapped
+ * timeIdx back toward the previous clock-time, effectively cancelling the
+ * step. See pendingJumpRef below for the fix — jump() now flags "a
+ * forward/backward step caused this date change", and the times-fetch
+ * effect honors that flag instead of doing closest-time-match.
  */
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
@@ -199,6 +209,18 @@ export function useHistoricalChain() {
   const selectedDateRef = useRef("");
   const selectedTimeRef = useRef<number | null>(null);
 
+  // When jump() crosses a date boundary (forward past the day's last
+  // snapshot, or backward past the day's first), it sets this to tell the
+  // times-fetch effect below "a forward/backward step caused this date
+  // change — land on the first/last snapshot of the new day, don't try to
+  // preserve the previous clock-time". Without this, the closest-time-match
+  // logic in that effect (meant for manual date-picker changes) would snap
+  // straight back to the old time-of-day, making Auto Play/Forward/Reverse
+  // look stuck on a single time across every day. Cleared as soon as it's
+  // consumed, so manual date-picker changes (which don't set this) keep
+  // their existing closest-time-match behavior exactly as before.
+  const pendingJumpRef = useRef<"start" | "end" | null>(null);
+
   // ── Bookmarks ────────────────────────────────────────────────────────────
   const [bookmarks, setBookmarks] = useState<SnapshotBookmark[]>(() => loadBookmarks());
 
@@ -263,12 +285,27 @@ export function useHistoricalChain() {
 
   // Times for the selected date — try to keep the same time of day selected
   // (closest match) instead of always jumping to the latest snapshot.
+  //
+  // Bugfix: if pendingJumpRef is set (jump() just crossed a date boundary),
+  // that intent wins over closest-time-match — land on the first snapshot
+  // of the day (forward step) or last snapshot of the day (backward step)
+  // instead of snapping back toward the old clock-time. This is exactly
+  // what makes Auto Play/Forward/Reverse actually advance across days.
   useEffect(() => {
     if (!expiry || !selectedDate) { setTimes([]); return; }
     fetchArchivedTimes(symbol, selectedDate, expiry)
       .then(r => {
         const t = r.times ?? [];
         setTimes(t);
+
+        const pending = pendingJumpRef.current;
+        if (pending) {
+          pendingJumpRef.current = null;
+          setTimeIdx(pending === "end" ? Math.max(t.length - 1, 0) : 0);
+          resumedRef.current = true;
+          return;
+        }
+
         if (!resumedRef.current) {
           const last = loadLastSession();
           if (last && last.symbol === symbol && last.expiry === expiry && last.date === selectedDate && t.length > 0) {
@@ -350,6 +387,12 @@ export function useHistoricalChain() {
   // in the archive (real trading sessions), stepping through them already
   // skips holidays and non-trading hours — there is no separate "skip"
   // pass needed since the underlying data has nothing to skip past.
+  //
+  // Bugfix: when a step crosses into the next/previous day, we flag the
+  // intended landing spot ("start" of the new day for a forward step,
+  // "end" for a backward step) via pendingJumpRef *before* changing
+  // dateIdx, so the times-fetch effect above lands there instead of
+  // re-snapping to the old clock-time once the new day's times[] loads.
   const jump = (tf: (typeof TIMEFRAMES)[number], dir: 1 | -1) => {
     setResolution(tf.key);
     if (tf.snapshotStep === "day") {
@@ -360,12 +403,16 @@ export function useHistoricalChain() {
     setTimeIdx(i => {
       const next = i + dir * n;
       if (next < 0) {
+        if (dateIdx === 0) return i; // already at the very first archived day — nothing to jump back to
+        pendingJumpRef.current = "end";
         setDateIdx(d => Math.max(d - 1, 0));
-        return 0;
+        return i; // unchanged here; the times-fetch effect will land on "end" once the new day's times[] arrives
       }
       if (next >= times.length) {
+        if (dateIdx >= dates.length - 1) return i; // already at the very last archived day — nothing to jump forward to
+        pendingJumpRef.current = "start";
         setDateIdx(d => Math.min(d + 1, Math.max(dates.length - 1, 0)));
-        return Math.max(times.length - 1, 0);
+        return i; // unchanged here; the times-fetch effect will land on "start" once the new day's times[] arrives
       }
       return next;
     });
