@@ -23,6 +23,16 @@
  * HistoricalContextBar (Date|Time|DTE|Market Status|VIX|IV|PCR|Spot|
  * Futures|Gap%|Bias score strip). None of the pre-existing layout,
  * calculation logic, or workflows were changed — this is additive UI only.
+ *
+ * ── Manual Exit / exit-history pass ─────────────────────────────────────
+ * onExit passed to Position Book is now a small wrapper: it still calls
+ * the store's removeLeg for a leg that's already CLOSED (a full manual
+ * exit already recorded, user is choosing to remove it from the list),
+ * but also clears that leg's persisted exit history via
+ * exitHistoryStorage.clearForLeg — otherwise old ExitRecords would be
+ * orphaned in localStorage under a legId nothing references anymore.
+ * Partial/full exits themselves go through Position Book's own call to
+ * the store's exitLeg action (unchanged here).
  */
 
 import { useState, useRef, useEffect } from "react";
@@ -31,6 +41,7 @@ import { useTheme } from "../store/themeStore";
 import { useSimulatorStore } from "../simulator/state/simulatorStore";
 import { STRIKE_STEPS } from "../simulator/models/Option";
 import { fmtDateLabel } from "../simulator/hooks/useHistoricalChain";
+import { exitHistoryStorage } from "../simulator/services/exitHistoryStorage";
 
 import { useHistoricalChain } from "../simulator/hooks/useHistoricalChain";
 import ReplayControlBar from "../simulator/components/ReplayControlBar";
@@ -90,6 +101,17 @@ export default function Simulator() {
   } = calc;
 
   const handleRollStrike = (leg: any) => calc.handleRollStrike(leg, updateLeg);
+
+  // Removing a leg from Position Book's list: if it's already CLOSED (a
+  // full manual exit already happened and was recorded), also clear its
+  // persisted exit history so old ExitRecords don't linger in
+  // localStorage under a legId nothing references anymore. For a leg
+  // that's still OPEN (never exited), this is just the pre-existing
+  // "discard this leg" behavior — no history exists to clear.
+  const handleRemoveLeg = (id: string) => {
+    exitHistoryStorage.clearForLeg(id);
+    removeLeg(id);
+  };
 
   // stratName is shared between leg-actions (a template sets it) and
   // persistence (save/load/export read+write it) — same as the original
@@ -198,7 +220,7 @@ export default function Simulator() {
               template={legActions.template} handleTemplate={legActions.handleTemplate}
               addCustomLeg={legActions.addCustomLeg}
               legs={legs} updateLeg={updateLeg}
-              handleDuplicate={legActions.handleDuplicate} removeLeg={removeLeg}
+              handleDuplicate={legActions.handleDuplicate} removeLeg={handleRemoveLeg}
               setDragFrom={legActions.setDragFrom} setDragOver={legActions.setDragOver}
               handleDrop={legActions.handleDrop}
               handleRollStrike={handleRollStrike}
@@ -212,7 +234,7 @@ export default function Simulator() {
             effectiveSpot={effectiveSpot} showPerLeg={showPerLeg} setShowPerLeg={setShowPerLeg}
             margin={margin} portfolioGreeks={portfolioGreeks} pop={pop}
             scenarioMatrix={scenarioMatrix} adjustments={adjustments} worstLevel={worstLevel}
-            handleRollStrike={handleRollStrike} removeLeg={removeLeg} tradeLog={tradeLog}
+            handleRollStrike={handleRollStrike} removeLeg={handleRemoveLeg} tradeLog={tradeLog}
             livePnL={calc.livePnL} isReplaying={chain.hasData && !!chain.chainMeta}
           />
         </div>
@@ -239,7 +261,7 @@ export default function Simulator() {
         spot={effectiveSpot}
         T={T}
         riskFreeRate={r}
-        onExit={removeLeg}
+        onExit={handleRemoveLeg}
         onUpdate={updateLeg}
         onAddLeg={legActions.addCustomLeg}
       />
