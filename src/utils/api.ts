@@ -27,6 +27,27 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json();
 }
 
+/**
+ * Tries to surface the backend's actual error message (e.g. "No matching
+ * rows found for batch ...") instead of a generic "HTTP 404" - important
+ * for delete/mutation calls where a silent failure otherwise looks like
+ * nothing happened at all.
+ */
+async function del<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { method: "DELETE" });
+  if (!res.ok) {
+    let message = `HTTP ${res.status}: ${res.statusText}`;
+    try {
+      const body = await res.json();
+      if (body?.error) message = body.error;
+    } catch {
+      // response wasn't JSON - keep the generic message
+    }
+    throw new Error(message);
+  }
+  return res.json();
+}
+
 export type Timeframe = "5m" | "15m" | "30m" | "1h" | "2h" | "1d";
 
 // ─── Health ──────────────────────────────────────────────────────────────────
@@ -236,6 +257,141 @@ export const runWalkForwardBacktest = (params: {
   exit_time   : params.exitTime,
 });
 
+// ─── Multi-scenario Batch Backtest (many expiries x strikes x timeframes x
+// strategies, incl. Greeks-driven Delta-Neutral / Theta-Harvest, in one run) ──
+export type BatchStrategy = "straddle" | "strangle" | "iron_condor" | "delta_neutral" | "theta_harvest";
+
+export interface BatchTriggerResponse {
+  success: boolean;
+  job_id : string;
+  status : "running";
+  note   : string;
+}
+
+export interface BatchStatusResponse {
+  success: boolean;
+  job_id : string;
+  status : "running" | "done" | "error";
+  result : { batch_id: string; scenarios_run: number; saved: number; skipped: number } | null;
+  error  : string | null;
+}
+
+export const runBatchBacktest = (params: {
+  symbols               : string[];
+  strategies?           : BatchStrategy[];
+  strikeOffsets?        : number[];
+  timeframes?           : string[];
+  slPct?                : number;
+  tgtPct?                : number;
+  lots?                  : number;
+  maxEntriesPerExpiry?   : number;
+}) => post<BatchTriggerResponse>("/backtest/batch", {
+  symbols                : params.symbols,
+  strategies             : params.strategies,
+  strike_offsets         : params.strikeOffsets,
+  timeframes             : params.timeframes,
+  sl_pct                 : params.slPct ?? 50,
+  tgt_pct                : params.tgtPct ?? 50,
+  lots                   : params.lots ?? 1,
+  max_entries_per_expiry : params.maxEntriesPerExpiry ?? 20,
+});
+
+export const fetchBatchStatus = (jobId: string) =>
+  get<BatchStatusResponse>(`/backtest/batch/status/${jobId}`);
+
+export interface BatchListItem {
+  batch_id  : string;
+  created_at: number;
+  n         : number;
+  total_pnl : number;
+  avg_pnl   : number;
+  wins      : number;
+}
+
+/** Recent batch runs, most recent first — persisted in SQLite, survives server restarts. */
+export const fetchBatchList = (limit = 20) =>
+  get<{ success: boolean; batches: BatchListItem[] }>(`/backtest/batch/list?limit=${limit}`);
+
+/**
+ * Permanently delete results for one batch run. Cannot be undone.
+ *
+ * - deleteBatch(batchId): removes the ENTIRE batch (every symbol/strategy).
+ * - deleteBatch(batchId, symbol, strategy): removes just that one group
+ *   within the batch (e.g. drop "straddle" but keep "theta_harvest"),
+ *   leaving the rest of the batch intact.
+ */
+export const deleteBatch = (batchId: string, symbol?: string, strategy?: string) => {
+  const qs = [
+    symbol   ? `symbol=${symbol}`     : null,
+    strategy ? `strategy=${strategy}` : null,
+  ].filter(Boolean).join("&");
+  return del<{ success: boolean; batch_id: string; symbol: string | null; strategy: string | null; deleted_rows: number }>(
+    `/backtest/batch/${batchId}${qs ? `?${qs}` : ""}`
+  );
+};
+
+export interface BatchGroupSummary {
+  symbol   : string;
+  strategy : string;
+  n        : number;
+  total_pnl: number;
+  avg_pnl  : number;
+  wins     : number;
+  best_pnl : number;
+  worst_pnl: number;
+  win_rate : number;
+}
+
+/** Grouped (symbol, strategy) aggregate results for one batch run, best total PnL first. */
+export const fetchBatchSummary = (batchId: string) =>
+  get<{ success: boolean; batch_id: string; groups: BatchGroupSummary[] }>(
+    `/backtest/batch/results?batch_id=${batchId}&summary=true`
+  );
+
+/** One option leg as it was actually traded in a batch-backtest scenario. */
+export interface BatchLeg {
+  strike     : number;
+  option_type: "CE" | "PE";
+  action     : "BUY" | "SELL";
+  lots       : number;
+}
+
+export interface BatchResultRow {
+  id           : number;
+  batch_id     : string;
+  created_at   : number;
+  symbol       : string;
+  strategy     : string;
+  expiry_date  : string;    // YYYY-MM-DD - which expiry contract this trade used
+  strike_offset: number;
+  timeframe    : string;
+  legs         : BatchLeg[]; // exact strikes/CE-PE/BUY-SELL/lots that were traded
+  entry_spot   : number;
+  entry_premium: number;    // total premium collected/paid at entry
+  sl_amount    : number;    // stop-loss amount actually applied (currency, not %)
+  tgt_amount   : number;    // target amount actually applied
+  entry_t      : number;
+  exit_t       : number;
+  exit_spot    : number;
+  exit_reason  : string;    // "SL Hit" | "Target Hit" | "data_ended"
+  pnl          : number;
+  was_mock     : number;
+}
+
+/**
+ * Individual scenario results for one batch run, ranked best PnL first -
+ * each row includes the exact legs traded, SL/target amounts applied, and
+ * exit reason, so any result can be fully explained (which expiry, which
+ * strike, buy or sell, how much SL, why it exited).
+ *
+ * Pass symbol/strategy to drill into one group from the summary view
+ * (e.g. the row the user tapped on) instead of the whole batch.
+ */
+export const fetchBatchResults = (batchId: string, symbol?: string, strategy?: string, limit = 100) =>
+  get<{ success: boolean; batch_id: string; results: BatchResultRow[] }>(
+    `/backtest/batch/results?batch_id=${batchId}${symbol ? `&symbol=${symbol}` : ""}${strategy ? `&strategy=${strategy}` : ""}&limit=${limit}`
+  );
+
 // ─── Greeks ──────────────────────────────────────────────────────────────────
 export const fetchGreeks = (spot: number, strike: number, expiry: number, iv: number, type: string) =>
   get<GreeksResponse>(`/greeks?spot=${spot}&strike=${strike}&expiry=${expiry}&iv=${iv}&type=${type}`);
@@ -252,8 +408,31 @@ export const fetchScanner = (symbol: string) =>
 export const fetchPortfolio = () =>
   get<{ success: boolean; data: Portfolio }>("/papertrade?action=portfolio");
 
+/** One paper-trade order exactly as PaperOrder.to_dict() serializes it. */
+export interface PaperOrderRecord {
+  order_id        : string;
+  symbol          : string;
+  option_type     : string;
+  strike          : number;
+  expiry          : string;
+  action           : "BUY" | "SELL";
+  qty             : number;
+  entry_price     : number;
+  exit_price      : number;
+  sl              : number;
+  target          : number;
+  status          : "OPEN" | "CLOSED" | "SL_HIT" | "TARGET_HIT";
+  entry_time      : string;   // formatted display string, e.g. "02 Aug 14:30:00"
+  exit_time       : string;   // formatted display string, "" if still open
+  entry_time_epoch: number;   // unix seconds - use this for charts/sorting
+  exit_time_epoch : number;   // unix seconds, 0 if still open
+  pnl             : number;
+  mtm             : number;
+}
+
+/** Last N closed paper trades, most-recent-last (chronological order). */
 export const fetchHistory = (limit = 50) =>
-  get<{ success: boolean; data: unknown[] }>(`/papertrade?action=history&limit=${limit}`);
+  get<{ success: boolean; data: PaperOrderRecord[] }>(`/papertrade?action=history&limit=${limit}`);
 
 export const placePaperOrder = (order: {
   symbol      : string;

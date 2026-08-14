@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchPortfolio, placePaperOrder, exitPaperOrder } from "../utils/api";
+import { fetchPortfolio, placePaperOrder, exitPaperOrder, fetchHistory } from "../utils/api";
 import { useAppStore } from "../store";
 import Card from "../components/ui/Card";
 import Badge from "../components/ui/Badge";
@@ -35,6 +35,15 @@ export default function PaperTrade() {
     refetchInterval: 3000,
   });
 
+  // Closed trade history - previously only used to build Dashboard's equity
+  // curve, not shown as a list anywhere. Genuine gap: a trader has no way
+  // to review what actually closed and why on this page.
+  const { data: historyData, isLoading: historyLoading } = useQuery({
+    queryKey       : ["history"],
+    queryFn        : () => fetchHistory(30),
+    refetchInterval: 5000,
+  });
+
   const place = useMutation({
     mutationFn: placePaperOrder,
     onSuccess : (d) => {
@@ -51,7 +60,10 @@ export default function PaperTrade() {
   const exit = useMutation({
     mutationFn: ({ id, price }: { id: string; price: number }) =>
       exitPaperOrder(id, price),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["portfolio"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["portfolio"] });
+      qc.invalidateQueries({ queryKey: ["history"] });
+    },
   });
 
   const handlePlace = () => {
@@ -72,6 +84,7 @@ export default function PaperTrade() {
   };
 
   const p = data?.data;
+  const history = [...(historyData?.data ?? [])].reverse(); // most recent first
   const fmt = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
   return (
@@ -231,6 +244,47 @@ export default function PaperTrade() {
           </div>
         </Card>
       )}
+
+      {/* Trade history - closed trades (previously nowhere on this page,
+          even though the data was already available and used elsewhere) */}
+      <Card title="Trade History">
+        {historyLoading ? <Loader text="Loading history..." /> : history.length === 0 ? (
+          <div className="text-sm text-center py-6" style={{ color: theme.text.muted }}>
+            No closed trades yet.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {history.map((t) => (
+              <div key={t.order_id} className="rounded-lg p-3"
+                style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}` }}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-1">
+                    <span className="text-sm font-bold" style={{ color: theme.text.secondary }}>
+                      {t.symbol} {t.strike} {t.option_type}
+                    </span>
+                    <Badge label={t.action} variant={t.action.toLowerCase() as "buy" | "sell"} />
+                    <span className="text-sm px-1.5 py-0.5 rounded"
+                      style={{ color: theme.text.faint, background: theme.border.subtle }}>
+                      {t.status}
+                    </span>
+                  </div>
+                  <span className="text-sm font-bold" style={{ color: t.pnl >= 0 ? theme.accent.green : theme.accent.red }}>
+                    {t.pnl >= 0 ? "+" : ""}₹{fmt(t.pnl)}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-1 text-sm" style={{ color: theme.text.muted }}>
+                  <span>Qty: <span style={{ color: theme.text.secondary }}>{t.qty}</span></span>
+                  <span>Entry: <span style={{ color: theme.text.secondary }}>₹{t.entry_price}</span></span>
+                  <span>Exit: <span style={{ color: theme.text.secondary }}>₹{t.exit_price}</span></span>
+                </div>
+                <div className="text-sm mt-1" style={{ color: theme.text.faint }}>
+                  {t.entry_time} → {t.exit_time}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }
