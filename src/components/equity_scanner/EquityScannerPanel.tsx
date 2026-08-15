@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import type { SignalType } from '../signal_engine/SignalCard';
+import type { SignalType, Signal } from '../signal_engine/SignalCard';
 import { SignalList } from '../signal_engine/SignalCard';
-import type { Signal } from '../signal_engine/SignalCard';
+import { useTheme } from '../../store/themeStore';
 
 interface ScanFilter {
   signal?: SignalType | '';
@@ -31,6 +31,7 @@ export const EquityScannerPanel: React.FC<EquityScannerPanelProps> = ({
   onScan,
   defaultUniverse = 'RELIANCE,TCS,INFY,HDFCBANK,ICICIBANK,WIPRO,AXISBANK,SBIN,LT,ITC',
 }) => {
+  const theme = useTheme();
   const [universe, setUniverse] = useState(defaultUniverse);
   const [filter, setFilter] = useState<ScanFilter>({
     signal: '',
@@ -57,24 +58,37 @@ export const EquityScannerPanel: React.FC<EquityScannerPanelProps> = ({
     }
   };
 
-  return (
-    <div className="scanner-panel">
-      <h2 className="scanner-title">Equity Scanner</h2>
+  const inputStyle: React.CSSProperties = {
+    background: theme.bg.surface,
+    color     : theme.text.primary,
+    border    : `1px solid ${theme.border.subtle}`,
+  };
 
+  return (
+    <div className="space-y-4">
       {/* Universe */}
-      <label className="field-label">Universe (comma-separated symbols)</label>
-      <textarea
-        className="scanner-universe"
-        rows={2}
-        value={universe}
-        onChange={(e) => setUniverse(e.target.value)}
-      />
+      <div>
+        <label className="text-xs font-bold tracking-wide uppercase block mb-1"
+          style={{ color: theme.text.muted }}>
+          Universe (comma-separated symbols)
+        </label>
+        <textarea
+          className="w-full rounded-lg p-2 text-sm font-mono"
+          style={inputStyle}
+          rows={2}
+          value={universe}
+          onChange={(e) => setUniverse(e.target.value)}
+        />
+      </div>
 
       {/* Filters */}
-      <div className="scanner-filters">
-        <div className="filter-group">
-          <label>Signal</label>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-bold tracking-wide uppercase block mb-1"
+            style={{ color: theme.text.muted }}>Signal</label>
           <select
+            className="w-full rounded-lg p-2 text-sm"
+            style={inputStyle}
             value={filter.signal}
             onChange={(e) => setFilter({ ...filter, signal: e.target.value as SignalType | '' })}
           >
@@ -84,48 +98,77 @@ export const EquityScannerPanel: React.FC<EquityScannerPanelProps> = ({
             <option value="HOLD">HOLD</option>
           </select>
         </div>
-        <div className="filter-group">
-          <label>Min Confidence</label>
+        <div>
+          <label className="text-xs font-bold tracking-wide uppercase block mb-1"
+            style={{ color: theme.text.muted }}>Min Confidence</label>
           <input
+            className="w-full rounded-lg p-2 text-sm"
+            style={inputStyle}
             type="number" min={0} max={1} step={0.05}
             value={filter.minConfidence}
             onChange={(e) => setFilter({ ...filter, minConfidence: +e.target.value })}
           />
         </div>
-        <div className="filter-group">
-          <label>Min Volume</label>
+        <div>
+          <label className="text-xs font-bold tracking-wide uppercase block mb-1"
+            style={{ color: theme.text.muted }}>Min Volume</label>
           <input
+            className="w-full rounded-lg p-2 text-sm"
+            style={inputStyle}
             type="number" step={10000}
             value={filter.minVolume}
             onChange={(e) => setFilter({ ...filter, minVolume: +e.target.value })}
           />
         </div>
-        <div className="filter-group">
-          <label>Price Range (₹)</label>
-          <input
-            type="number" placeholder="Min"
-            value={filter.minPrice}
-            onChange={(e) => setFilter({ ...filter, minPrice: +e.target.value })}
-          />
-          <span style={{ margin: '0 4px' }}>–</span>
-          <input
-            type="number" placeholder="Max"
-            value={filter.maxPrice}
-            onChange={(e) => setFilter({ ...filter, maxPrice: +e.target.value })}
-          />
+        <div>
+          <label className="text-xs font-bold tracking-wide uppercase block mb-1"
+            style={{ color: theme.text.muted }}>Price Range (₹)</label>
+          <div className="flex items-center gap-2">
+            <input
+              className="w-full rounded-lg p-2 text-sm"
+              style={inputStyle}
+              type="number" placeholder="Min"
+              value={filter.minPrice}
+              onChange={(e) => setFilter({ ...filter, minPrice: +e.target.value })}
+            />
+            <span style={{ color: theme.text.faint }}>–</span>
+            <input
+              className="w-full rounded-lg p-2 text-sm"
+              style={inputStyle}
+              type="number" placeholder="Max"
+              value={filter.maxPrice}
+              onChange={(e) => setFilter({ ...filter, maxPrice: +e.target.value })}
+            />
+          </div>
         </div>
       </div>
 
-      <button className="btn-scan" onClick={handleScan} disabled={loading}>
+      <button
+        onClick={handleScan}
+        disabled={loading}
+        className="w-full py-2.5 rounded-lg text-sm font-bold transition-opacity"
+        style={{
+          background: theme.accent.cyan,
+          color     : theme.bg.page,
+          opacity   : loading ? 0.6 : 1,
+        }}
+      >
         {loading ? 'Scanning…' : '🔍 Run Scan'}
       </button>
 
-      {error && <div className="scanner-error">{error}</div>}
+      {error && (
+        <div className="rounded-lg p-3 text-sm"
+          style={{ background: theme.accent.red + '15', color: theme.accent.red, border: `1px solid ${theme.accent.red}40` }}>
+          {error}
+        </div>
+      )}
 
       {/* Results */}
       {results.length > 0 && (
-        <div className="scanner-results">
-          <p>{results.length} stocks matched your criteria</p>
+        <div>
+          <p className="text-sm mb-2" style={{ color: theme.text.muted }}>
+            {results.length} stocks matched your criteria
+          </p>
           <SignalList signals={results.map((r) => r.signal)} />
         </div>
       )}
