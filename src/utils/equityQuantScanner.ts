@@ -33,6 +33,11 @@ export interface EquityScanResult {
   signal: Signal;
   avg_volume: number;
   last_price: number;
+  /** True when this symbol's candles came from the backend's mock/fallback
+   *  generator (e.g. Fyers historical call failed or returned nothing for
+   *  this symbol) rather than real market data. Surfaced in the panel so
+   *  signals are never mistaken for live analysis. */
+  mock: boolean;
 }
 
 // ─── Symbol normalization ─────────────────────────────────────────
@@ -233,6 +238,7 @@ export async function runEquityQuantScan(
         symbol,
         avg_volume: avgVolume,
         last_price: lastPrice,
+        mock: res.value.mock,
         signal: {
           symbol,
           signal: scored.signal,
