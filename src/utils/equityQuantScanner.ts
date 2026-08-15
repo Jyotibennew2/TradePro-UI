@@ -35,6 +35,21 @@ export interface EquityScanResult {
   last_price: number;
 }
 
+// ─── Symbol normalization ─────────────────────────────────────────
+
+/**
+ * TradePro's backend follows Fyers symbol convention elsewhere in the app
+ * (e.g. "NSE:NIFTY50-INDEX" for quotes). Equity scan input is a plain name
+ * like "RELIANCE" for convenience — normalize it to the qualified Fyers
+ * equity symbol before hitting /historical. If the user already typed a
+ * fully-qualified symbol (contains ":"), leave it as-is.
+ */
+function toFyersSymbol(sym: string): string {
+  const s = sym.trim().toUpperCase();
+  if (s.includes(':')) return s;
+  return `NSE:${s}-EQ`;
+}
+
 // ─── Indicators ────────────────────────────────────────────────────────────
 
 function ema(values: number[], period: number): number[] {
@@ -163,12 +178,22 @@ function scoreCandles(candles: Candle[]): ScoreResult | null {
  * Runs the quant swing/momentum scan across a universe of symbols.
  * Pure client-side — uses the existing /historical endpoint per symbol,
  * computes an explainable 0-100 score, and applies the panel's filters.
+ *
+ * Throws a descriptive error (surfaced in the panel's error box) when the
+ * scan produces zero results because of a fetch/data problem, so failures
+ * are never silent — as opposed to just showing an empty result list.
  */
 export async function runEquityQuantScan(
   universe: string[],
   filter: EquityScanFilter
 ): Promise<EquityScanResult[]> {
   const results: EquityScanResult[] = [];
+
+  let attempted = 0;
+  let fetchFailures = 0;
+  let noCandleData = 0;
+  let insufficientHistory = 0;
+  let firstErrorMsg = '';
 
   // Small batches so we don't hammer the backend proxy with parallel calls.
   const BATCH = 5;
@@ -177,16 +202,23 @@ export async function runEquityQuantScan(
     if (batch.length === 0) continue;
 
     const settled = await Promise.allSettled(
-      batch.map(sym => fetchHistorical(sym, 120, '1d'))
+      batch.map(sym => fetchHistorical(toFyersSymbol(sym), 120, '1d'))
     );
 
     settled.forEach((res, idx) => {
       const symbol = batch[idx];
-      if (res.status !== 'fulfilled' || !res.value.candles?.length) return;
+      attempted++;
+
+      if (res.status !== 'fulfilled') {
+        fetchFailures++;
+        if (!firstErrorMsg) firstErrorMsg = res.reason?.message || String(res.reason);
+        return;
+      }
+      if (!res.value.candles?.length) { noCandleData++; return; }
 
       const candles = res.value.candles;
       const scored = scoreCandles(candles);
-      if (!scored) return;
+      if (!scored) { insufficientHistory++; return; }
 
       const lastPrice = candles[candles.length - 1].close;
       const avgVolume =
@@ -211,6 +243,33 @@ export async function runEquityQuantScan(
         },
       });
     });
+  }
+
+  // Surface *why* nothing came back instead of a silent empty list.
+  if (results.length === 0 && attempted > 0) {
+    if (fetchFailures === attempted) {
+      throw new Error(
+        `Historical data fetch failed for all ${attempted} symbol(s). ` +
+        `First error: ${firstErrorMsg || 'unknown'}. Check backend connectivity / symbol format.`
+      );
+    }
+    if (noCandleData === attempted) {
+      throw new Error(
+        `Backend returned no candle data for any of the ${attempted} symbol(s) — ` +
+        `symbols may be unsupported/unlisted on the data feed.`
+      );
+    }
+    if (insufficientHistory === attempted) {
+      throw new Error(
+        `Not enough historical bars (need 55+) for any of the ${attempted} symbol(s) — ` +
+        `try a longer-listed symbol or check the /historical response.`
+      );
+    }
+    // Mixed outcome with zero matches: fetched fine but filters excluded everything.
+    throw new Error(
+      `Scanned ${attempted} symbol(s) successfully but none matched your filters ` +
+      `(min confidence ${filter.minConfidence}, min volume ${filter.minVolume}). Try loosening them.`
+    );
   }
 
   // Strongest signals first.
