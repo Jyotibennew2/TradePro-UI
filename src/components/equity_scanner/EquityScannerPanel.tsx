@@ -19,7 +19,11 @@ interface ScanResult {
 }
 
 interface EquityScannerPanelProps {
-  onScan: (filter: Omit<ScanFilter, ''>) => Promise<ScanResult[]>;
+  /**
+   * Runs the scan. Receives the parsed universe (comma-separated symbols,
+   * trimmed) plus the active filter — both are needed to actually run a scan.
+   */
+  onScan: (universe: string[], filter: ScanFilter) => Promise<ScanResult[]>;
   defaultUniverse?: string;
 }
 
@@ -43,7 +47,8 @@ export const EquityScannerPanel: React.FC<EquityScannerPanelProps> = ({
     setLoading(true);
     setError(null);
     try {
-      const data = await onScan(filter);
+      const symbolList = universe.split(',').map((s) => s.trim()).filter(Boolean);
+      const data = await onScan(symbolList, filter);
       setResults(data);
     } catch (e: any) {
       setError(e.message || 'Scan failed');

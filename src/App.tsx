@@ -5,6 +5,7 @@ import Sidebar   from "./components/layout/Sidebar";
 import Dashboard  from "./pages/Dashboard";
 import OptionChain from "./pages/OptionChain";
 import Scanner    from "./pages/Scanner";
+import EquityScanner from "./pages/EquityScanner";
 import Strategy   from "./pages/Strategy";
 import PaperTrade from "./pages/PaperTrade";
 import Portfolio  from "./pages/Portfolio";
@@ -50,6 +51,7 @@ export default function App() {
                 <Route path="/"         element={<Dashboard  />} />
                 <Route path="/chain"    element={<OptionChain />} />
                 <Route path="/scanner"  element={<Scanner    />} />
+                <Route path="/equity-scanner" element={<EquityScanner />} />
                 <Route path="/strategy" element={<Strategy   />} />
                 <Route path="/paper"    element={<PaperTrade />} />
                 <Route path="/portfolio"element={<Portfolio  />} />
