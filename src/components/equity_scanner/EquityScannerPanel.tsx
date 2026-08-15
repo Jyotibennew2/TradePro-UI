@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { SignalType, Signal } from '../signal_engine/SignalCard';
 import { SignalList } from '../signal_engine/SignalCard';
 import { useTheme } from '../../store/themeStore';
+import { UNIVERSE_PRESETS } from '../../utils/niftyUniverse';
 
 interface ScanFilter {
   signal?: SignalType | '';
@@ -22,6 +23,9 @@ interface EquityScannerPanelProps {
   /**
    * Runs the scan. Receives the parsed universe (comma-separated symbols,
    * trimmed) plus the active filter — both are needed to actually run a scan.
+   * `onProgress`, if provided by the scan function's caller via closures,
+   * is not required here; instead we show a simple "scanning N symbols"
+   * indicator based on the universe size while the promise is pending.
    */
   onScan: (universe: string[], filter: ScanFilter) => Promise<ScanResult[]>;
   defaultUniverse?: string;
@@ -32,6 +36,7 @@ export const EquityScannerPanel: React.FC<EquityScannerPanelProps> = ({
   defaultUniverse = 'RELIANCE,TCS,INFY,HDFCBANK,ICICIBANK,WIPRO,AXISBANK,SBIN,LT,ITC',
 }) => {
   const theme = useTheme();
+  const [preset, setPreset] = useState('custom');
   const [universe, setUniverse] = useState(defaultUniverse);
   const [filter, setFilter] = useState<ScanFilter>({
     signal: '',
@@ -43,12 +48,22 @@ export const EquityScannerPanel: React.FC<EquityScannerPanelProps> = ({
   const [results, setResults] = useState<ScanResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scanCount, setScanCount] = useState(0);
+
+  const handlePresetChange = (key: string) => {
+    setPreset(key);
+    const p = UNIVERSE_PRESETS.find((x) => x.key === key);
+    if (p && p.symbols.length > 0) {
+      setUniverse(p.symbols.join(','));
+    }
+  };
 
   const handleScan = async () => {
     setLoading(true);
     setError(null);
+    const symbolList = universe.split(',').map((s) => s.trim()).filter(Boolean);
+    setScanCount(symbolList.length);
     try {
-      const symbolList = universe.split(',').map((s) => s.trim()).filter(Boolean);
       const data = await onScan(symbolList, filter);
       setResults(data);
     } catch (e: any) {
@@ -68,17 +83,33 @@ export const EquityScannerPanel: React.FC<EquityScannerPanelProps> = ({
     <div className="space-y-4">
       {/* Universe */}
       <div>
-        <label className="text-xs font-bold tracking-wide uppercase block mb-1"
-          style={{ color: theme.text.muted }}>
-          Universe (comma-separated symbols)
-        </label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="text-xs font-bold tracking-wide uppercase"
+            style={{ color: theme.text.muted }}>
+            Universe (comma-separated symbols)
+          </label>
+          <select
+            className="rounded-lg px-2 py-1 text-xs font-bold"
+            style={inputStyle}
+            value={preset}
+            onChange={(e) => handlePresetChange(e.target.value)}
+          >
+            {UNIVERSE_PRESETS.map((p) => (
+              <option key={p.key} value={p.key}>{p.label}</option>
+            ))}
+          </select>
+        </div>
         <textarea
           className="w-full rounded-lg p-2 text-sm font-mono"
           style={inputStyle}
-          rows={2}
+          rows={3}
           value={universe}
-          onChange={(e) => setUniverse(e.target.value)}
+          onChange={(e) => { setUniverse(e.target.value); setPreset('custom'); }}
         />
+        <p className="text-xs mt-1" style={{ color: theme.text.faint }}>
+          {universe.split(',').map((s) => s.trim()).filter(Boolean).length} symbols in universe
+          {preset === 'nifty50' && ' — Nifty 50 preset (edit freely, list may need periodic refresh)'}
+        </p>
       </div>
 
       {/* Filters */}
@@ -153,7 +184,7 @@ export const EquityScannerPanel: React.FC<EquityScannerPanelProps> = ({
           opacity   : loading ? 0.6 : 1,
         }}
       >
-        {loading ? 'Scanning…' : '🔍 Run Scan'}
+        {loading ? `Scanning ${scanCount} symbols…` : '🔍 Run Scan'}
       </button>
 
       {error && (
