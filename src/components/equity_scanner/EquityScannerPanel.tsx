@@ -17,15 +17,13 @@ interface ScanResult {
   signal: Signal;
   avg_volume: number;
   last_price: number;
+  mock?: boolean;
 }
 
 interface EquityScannerPanelProps {
   /**
    * Runs the scan. Receives the parsed universe (comma-separated symbols,
    * trimmed) plus the active filter — both are needed to actually run a scan.
-   * `onProgress`, if provided by the scan function's caller via closures,
-   * is not required here; instead we show a simple "scanning N symbols"
-   * indicator based on the universe size while the promise is pending.
    */
   onScan: (universe: string[], filter: ScanFilter) => Promise<ScanResult[]>;
   defaultUniverse?: string;
@@ -78,6 +76,8 @@ export const EquityScannerPanel: React.FC<EquityScannerPanelProps> = ({
     color     : theme.text.primary,
     border    : `1px solid ${theme.border.subtle}`,
   };
+
+  const mockCount = results.filter((r) => r.mock).length;
 
   return (
     <div className="space-y-4">
@@ -197,9 +197,15 @@ export const EquityScannerPanel: React.FC<EquityScannerPanelProps> = ({
       {/* Results */}
       {results.length > 0 && (
         <div>
-          <p className="text-sm mb-2" style={{ color: theme.text.muted }}>
+          <p className="text-sm mb-1" style={{ color: theme.text.muted }}>
             {results.length} stocks matched your criteria
           </p>
+          {mockCount > 0 && (
+            <div className="rounded-lg p-2 mb-2 text-xs"
+              style={{ background: theme.accent.orange + '15', color: theme.accent.orange, border: `1px solid ${theme.accent.orange}40` }}>
+              ⚠️ {mockCount}/{results.length} symbol(s) used MOCK data (Fyers historical call failed or is unauthenticated for these) — signals for these are not reliable. Check backend terminal logs for "History error".
+            </div>
+          )}
           <SignalList signals={results.map((r) => r.signal)} />
         </div>
       )}
