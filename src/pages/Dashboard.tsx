@@ -22,7 +22,11 @@ function StatBox({ label, value, sub, color, theme }: {
 export default function Dashboard() {
   const theme = useTheme();
   const health  = useQuery({ queryKey: ["health"],    queryFn: fetchHealth,           refetchInterval: 10000 });
-  const quotes  = useQuery({ queryKey: ["quotes"],    queryFn: () => fetchQuotes(),   refetchInterval: 3000  });
+  // Shares the ["quotes"] cache key with Header's useQuotes() hook — react-query
+  // dedupes same-key queries to one shared poll, so this doesn't double the
+  // request rate. Was 3s; bumped to 10s to stay under Fyers' rate limit
+  // (compounds badly across multiple open browser tabs, each polling independently).
+  const quotes  = useQuery({ queryKey: ["quotes"],    queryFn: () => fetchQuotes(),   refetchInterval: 10000 });
   const funds   = useQuery({ queryKey: ["funds"],     queryFn: fetchFunds,            refetchInterval: 30000 });
   const paper   = useQuery({ queryKey: ["portfolio"], queryFn: fetchPortfolio,        refetchInterval: 5000  });
 
