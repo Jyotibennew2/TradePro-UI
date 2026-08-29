@@ -2,13 +2,14 @@ import { useState, useEffect } from "react";
 import {
   runBatchBacktest, runBatchWalkForward,
   fetchArchivedDates, fetchArchivedExpiries, fetchArchivedTimes,
-  type BatchRankMetric, type BatchResultRow,
+  type BatchRankMetric, type BatchResultRow, type SavedBacktestKind,
 } from "../../utils/api";
 import Card from "../../components/ui/Card";
 import Loader from "../../components/ui/Loader";
 import ErrorBox from "../../components/ui/ErrorBox";
 import { useTheme } from "../../store/themeStore";
 import { STRATEGIES, SYMBOLS, TIMEFRAMES, DataSourceBadge, fmt, fmtPct, fmtExpiryLabel } from "./shared";
+import SaveBacktestButton from "./SaveBacktestButton";
 
 const RANK_OPTIONS: { key: BatchRankMetric; label: string }[] = [
   { key: "total_pnl",     label: "Total P&L"     },
@@ -49,6 +50,9 @@ export default function BatchBacktest() {
   const [rankBy,   setRankBy]   = useState<BatchRankMetric>("total_pnl");
 
   const [result, setResult]   = useState<BatchResultRow[] | null>(null);
+  const [fullResponse, setFullResponse] = useState<any>(null);
+  const [lastRequest, setLastRequest]   = useState<any>(null);
+  const [lastKind, setLastKind]         = useState<SavedBacktestKind>("batch");
   const [dataSource, setDataSource] = useState<"LIVE" | "MOCK" | undefined>();
   const [failedCount, setFailedCount] = useState(0);
   // requested_jobs = raw combo count before the backend's MAX_JOBS cap;
@@ -78,15 +82,19 @@ export default function BatchBacktest() {
   const runStrategySweep = async () => {
     if (!canRunStrategy) return;
     setRunning(true); setErrored(false); setErrorMsg(null); setResult(null);
+    const req = {
+      strategies, symbols, resolutions,
+      days, lotSize, slPct, tgtPct,
+      trailingSlPct: trailSl > 0 ? trailSl : undefined,
+      greeksFilter : useGreeks ? { min_delta: minDelta, max_delta: maxDelta } : undefined,
+      rankBy,
+    };
     try {
-      const res = await runBatchBacktest({
-        strategies, symbols, resolutions: resolutions as any,
-        days, lotSize, slPct, tgtPct,
-        trailingSlPct: trailSl > 0 ? trailSl : undefined,
-        greeksFilter : useGreeks ? { min_delta: minDelta, max_delta: maxDelta } : undefined,
-        rankBy,
-      });
+      const res = await runBatchBacktest({ ...req, resolutions: resolutions as any });
       setResult(res.ranked);
+      setFullResponse(res);
+      setLastRequest(req);
+      setLastKind("batch");
       setFailedCount(res.failed?.length ?? 0);
       setRequestedJobs(res.requested_jobs);
       setExecutedJobs(res.total_jobs);
@@ -147,15 +155,19 @@ export default function BatchBacktest() {
   const runRealDataSweep = async () => {
     if (!canRunRealData || entryTime === null) return;
     setRunning(true); setErrored(false); setErrorMsg(null); setResult(null);
+    const req = {
+      symbols: realSymbols, expiries: selectedExpiries, strikes,
+      entryTime, strategies: realStrategies,
+      lotSize, slPct, tgtPct,
+      trailingSlPct: trailSl > 0 ? trailSl : undefined,
+      rankBy,
+    };
     try {
-      const res = await runBatchWalkForward({
-        symbols: realSymbols, expiries: selectedExpiries, strikes,
-        entryTime, strategies: realStrategies,
-        lotSize, slPct, tgtPct,
-        trailingSlPct: trailSl > 0 ? trailSl : undefined,
-        rankBy,
-      });
+      const res = await runBatchWalkForward(req);
       setResult(res.ranked);
+      setFullResponse(res);
+      setLastRequest(req);
+      setLastKind("batch_realdata");
       setFailedCount(res.failed?.length ?? 0);
       setRequestedJobs(res.requested_jobs);
       setExecutedJobs(res.total_jobs);
@@ -418,8 +430,12 @@ export default function BatchBacktest() {
             </div>
           )}
           <div className="flex justify-between items-center">
-            <div className="text-sm" style={{ color: theme.text.muted }}>
-              {result.length} ranked{failedCount > 0 ? `, ${failedCount} failed (missing data for that combo)` : ""}
+            <div className="flex items-center gap-2">
+              <SaveBacktestButton kind={lastKind} request={lastRequest} result={fullResponse}
+                symbol={(lastKind === "batch" ? symbols : realSymbols).join(",")} />
+              <div className="text-sm" style={{ color: theme.text.muted }}>
+                {result.length} ranked{failedCount > 0 ? `, ${failedCount} failed (missing data for that combo)` : ""}
+              </div>
             </div>
             <DataSourceBadge source={dataSource} theme={theme} />
           </div>
