@@ -7,6 +7,7 @@ import SingleBacktest from "./SingleBacktest";
 import CompareBacktest from "./CompareBacktest";
 import HistoricalData from "./HistoricalData";
 import BatchBacktest from "./BatchBacktest";
+import SavedBacktests from "./SavedBacktests";
 
 export default function Backtest() {
   const theme = useTheme();
@@ -29,18 +30,18 @@ export default function Backtest() {
   return (
     <div className="p-4 space-y-4">
       {/* Mode toggle */}
-      <div className="flex gap-1">
-        {(["single", "compare", "historical", "batch"] as Mode[]).map((m, i) => (
+      <div className="flex gap-1 flex-wrap">
+        {(["single", "compare", "historical", "batch", "saved"] as Mode[]).map((m, i) => (
           <button key={m} onClick={() => setMode(m)}
             className="flex-1 py-2 rounded-xl text-sm font-bold"
             style={{ background: mode === m ? theme.accent.cyan : theme.bg.surfaceAlt, color: mode === m ? theme.bg.page : theme.text.muted, border: `1px solid ${theme.border.subtle}` }}>
-            {["Single Backtest", "Compare Strategies", "Historical Data", "Batch Backtest"][i]}
+            {["Single Backtest", "Compare Strategies", "Historical Data", "Batch Backtest", "Saved"][i]}
           </button>
         ))}
       </div>
 
-      {/* Shared: Symbol + Timeframe — not used by Batch (it picks its own multi-select) */}
-      {mode !== "batch" && (
+      {/* Shared: Symbol + Timeframe — not used by Batch (picks its own multi-select) or Saved (no run config) */}
+      {mode !== "batch" && mode !== "saved" && (
         <Card title="Symbol & Timeframe">
           <div className="space-y-3">
             <div>
@@ -104,6 +105,8 @@ export default function Backtest() {
       )}
 
       {mode === "batch" && <BatchBacktest />}
+
+      {mode === "saved" && <SavedBacktests />}
     </div>
   );
 }
