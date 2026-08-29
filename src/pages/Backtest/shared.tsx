@@ -25,7 +25,7 @@ export const EXPIRY_PRESETS = [
   { label: "Monthly (30d)", days: 30 },
 ];
 
-export type Mode = "single" | "compare" | "historical" | "batch";
+export type Mode = "single" | "compare" | "historical" | "batch" | "saved";
 export type AnyChainRow = HistoricalChainRow | ArchivedChainRow;
 
 export function StatBox({ label, value, color, theme }: { label: string; value: string; color: string; theme: Theme }) {
@@ -58,4 +58,8 @@ export const fmtPct = (n: number) => `${n.toFixed(1)}%`;
 export const fmtExpiryLabel = (d: string) => {
   try { return new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }); }
   catch { return d; }
+};
+export const fmtDateTime = (epochSeconds: number) => {
+  try { return new Date(epochSeconds * 1000).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); }
+  catch { return String(epochSeconds); }
 };
