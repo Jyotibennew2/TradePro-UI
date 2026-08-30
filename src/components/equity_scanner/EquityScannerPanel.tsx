@@ -27,11 +27,14 @@ interface EquityScannerPanelProps {
    */
   onScan: (universe: string[], filter: ScanFilter) => Promise<ScanResult[]>;
   defaultUniverse?: string;
+  /** Optional — when provided, each non-HOLD signal shows a "Paper Trade" button. */
+  onPaperTrade?: (signal: Signal) => void;
 }
 
 export const EquityScannerPanel: React.FC<EquityScannerPanelProps> = ({
   onScan,
   defaultUniverse = 'RELIANCE,TCS,INFY,HDFCBANK,ICICIBANK,WIPRO,AXISBANK,SBIN,LT,ITC',
+  onPaperTrade,
 }) => {
   const theme = useTheme();
   const [preset, setPreset] = useState('custom');
@@ -206,7 +209,7 @@ export const EquityScannerPanel: React.FC<EquityScannerPanelProps> = ({
               ⚠️ {mockCount}/{results.length} symbol(s) used MOCK data (Fyers historical call failed or is unauthenticated for these) — signals for these are not reliable. Check backend terminal logs for "History error".
             </div>
           )}
-          <SignalList signals={results.map((r) => r.signal)} />
+          <SignalList signals={results.map((r) => r.signal)} onPaperTrade={onPaperTrade} />
         </div>
       )}
     </div>
