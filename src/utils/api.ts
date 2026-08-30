@@ -27,6 +27,12 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json();
 }
 
+async function del<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  return res.json();
+}
+
 export type Timeframe = "5m" | "15m" | "30m" | "1h" | "2h" | "1d";
 
 // ─── Health ──────────────────────────────────────────────────────────────────
@@ -410,6 +416,51 @@ export const runBatchWalkForward = (params: {
   trailing_sl_pct : params.trailingSlPct,
   rank_by         : params.rankBy ?? "total_pnl",
 });
+
+// ─── Saved Backtests (Phase 1: save any backtest result, view it later) ──────
+// Thin CRUD over whatever the frontend already has after calling
+// runBacktest/runBatchBacktest/runBatchWalkForward/runWalkForwardBacktest —
+// no new calculation, the backend just persists the request/result JSON.
+export type SavedBacktestKind = "single" | "compare" | "batch" | "batch_realdata" | "walkforward";
+
+export interface SavedBacktestListItem {
+  id          : number;
+  created_at  : number;   // unix epoch seconds
+  label       : string | null;
+  kind        : SavedBacktestKind;
+  symbol      : string | null;
+  data_source : string | null;
+}
+
+export interface SavedBacktestFull extends SavedBacktestListItem {
+  request: any;
+  result : any;
+}
+
+export const saveBacktest = (params: {
+  kind       : SavedBacktestKind;
+  request    : unknown;
+  result     : unknown;
+  label?     : string;
+  symbol?    : string;
+  dataSource?: string;
+}) => post<{ success: boolean; id: number }>("/backtest/save", {
+  kind        : params.kind,
+  request     : params.request,
+  result      : params.result,
+  label       : params.label,
+  symbol      : params.symbol,
+  data_source : params.dataSource,
+});
+
+export const listSavedBacktests = (limit = 100) =>
+  get<{ success: boolean; data: SavedBacktestListItem[] }>(`/backtest/saved?limit=${limit}`);
+
+export const getSavedBacktest = (id: number) =>
+  get<{ success: boolean; data: SavedBacktestFull }>(`/backtest/saved/${id}`);
+
+export const deleteSavedBacktest = (id: number) =>
+  del<{ success: boolean; deleted: number }>(`/backtest/saved/${id}`);
 
 // ─── Historical ──────────────────────────────────────────────────────────────
 export const fetchHistorical = (symbol: string, days = 30, resolution: Timeframe = "1d") =>

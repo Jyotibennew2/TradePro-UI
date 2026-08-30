@@ -10,6 +10,7 @@ import {
 } from "recharts";
 import { useTheme } from "../../store/themeStore";
 import { STRATEGIES, StatBox, DataSourceBadge, fmt, fmtPct } from "./shared";
+import SaveBacktestButton from "./SaveBacktestButton";
 
 interface Props {
   symbol    : string;
@@ -32,14 +33,17 @@ export default function SingleBacktest({
 
   const [strategy, setStrategy]   = useState("ironCondor");
   const [data, setData]           = useState<any>(null);
+  const [lastRequest, setLastRequest] = useState<any>(null);
   const [isPending, setIsPending] = useState(false);
   const [isError, setIsError]     = useState(false);
 
   const runSingle = async () => {
     setIsPending(true); setIsError(false); setData(null);
+    const req = { symbol, strategy, days, resolution, sl_pct: slPct, tgt_pct: tgtPct, lot_size: lotSize };
     try {
-      const res = await runBacktest({ symbol, strategy, days, resolution, sl_pct: slPct, tgt_pct: tgtPct, lot_size: lotSize });
+      const res = await runBacktest(req);
       setData(res);
+      setLastRequest(req);
     } catch { setIsError(true); }
     finally { setIsPending(false); }
   };
@@ -87,7 +91,10 @@ export default function SingleBacktest({
       {isError   && <ErrorBox message="Backtest failed" />}
       {s && (
         <>
-          <div className="flex justify-end"><DataSourceBadge source={data?.data_source} theme={theme} /></div>
+          <div className="flex justify-between items-center">
+            <SaveBacktestButton kind="single" request={lastRequest} result={data} symbol={symbol} dataSource={data?.data_source} />
+            <DataSourceBadge source={data?.data_source} theme={theme} />
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <StatBox theme={theme} label="Total Trades"  value={`${s.total}`}                        color={theme.text.secondary} />
             <StatBox theme={theme} label="Win Rate"      value={fmtPct(s.win_rate)}                  color={s.win_rate >= 50 ? theme.accent.green : theme.accent.red} />
