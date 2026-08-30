@@ -48,8 +48,13 @@ export interface EquityScanResult {
  * like "RELIANCE" for convenience — normalize it to the qualified Fyers
  * equity symbol before hitting /historical. If the user already typed a
  * fully-qualified symbol (contains ":"), leave it as-is.
+ *
+ * Exported so callers outside this module (e.g. the paper-trade button)
+ * can convert a scan result's plain symbol to the qualified form needed
+ * by /api/papertrade, /api/quotes, etc. — without re-implementing this
+ * normalization.
  */
-function toFyersSymbol(sym: string): string {
+export function toFyersSymbol(sym: string): string {
   const s = sym.trim().toUpperCase();
   if (s.includes(':')) return s;
   return `NSE:${s}-EQ`;
