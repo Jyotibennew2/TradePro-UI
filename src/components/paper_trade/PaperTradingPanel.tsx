@@ -7,15 +7,14 @@ import { useTheme } from "../../store/themeStore";
  * (works for equity orders placed from the scanner AND the existing
  * options paper-trading routes, since backend/paper_trade.py's engine
  * already treats both uniformly). This is the first frontend consumer
- * of fetchPortfolio/fetchHistory/exitPaperOrder — those API functions
- * already existed but had no UI calling them before this.
+ * of fetchPortfolio/fetchHistory/exitPaperOrder.
  *
- * Note: SL/Target on an order are checked only when update_mtm() runs
- * server-side, and nothing currently calls that automatically for any
- * instrument (options included) — so exits here are manual (tap Exit,
- * confirm/adjust the fill price) rather than auto-triggered. Flagging
- * this rather than silently building a new auto-monitor loop, which is
- * a separate, larger piece of work.
+ * Phase 3: SL/Target on open positions are now checked automatically
+ * server-side every ~10s (server.py's monitor_paper_trades scheduler
+ * task) and auto-exit when hit — this panel polls on the same ~10s
+ * cadence so an auto-exit (SL_HIT/TARGET_HIT) shows up here without
+ * needing a manual refresh. Manual "Exit" is still available for
+ * closing a position before SL/Target is reached.
  */
 export default function PaperTradingPanel() {
   const theme = useTheme();
@@ -25,14 +24,18 @@ export default function PaperTradingPanel() {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = () => {
-    setLoading(true); setError(null);
     Promise.all([fetchPortfolio(), fetchHistory(20)])
-      .then(([p, h]) => { setPortfolio(p.data); setHistory(h.data); })
+      .then(([p, h]) => { setPortfolio(p.data); setHistory(h.data); setError(null); })
       .catch(() => setError("Failed to load paper trading data"))
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => {
+    setLoading(true);
+    refresh();
+    const id = setInterval(refresh, 10000);
+    return () => clearInterval(id);
+  }, []);
 
   const handleExit = async (order: any) => {
     let exitPrice: number | null = null;
@@ -67,6 +70,8 @@ export default function PaperTradingPanel() {
   if (!portfolio) return null;
 
   const pnlColor = (v: number) => v >= 0 ? theme.accent.green : theme.accent.red;
+  const risk = portfolio.risk;
+  const dailyLossPct = risk && risk.daily_loss_limit > 0 ? Math.min(100, (risk.session_loss / risk.daily_loss_limit) * 100) : 0;
 
   return (
     <div className="space-y-3">
@@ -85,6 +90,18 @@ export default function PaperTradingPanel() {
         </div>
       </div>
 
+      {risk && (
+        <div className="rounded-lg p-2" style={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}` }}>
+          <div className="flex items-center justify-between text-xs mb-1" style={{ color: theme.text.muted }}>
+            <span>Open trades: {portfolio.open_count}/{risk.max_trades}</span>
+            <span>Session loss: ₹{risk.session_loss.toLocaleString("en-IN")} / ₹{risk.daily_loss_limit.toLocaleString("en-IN")}</span>
+          </div>
+          <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: theme.bg.surface }}>
+            <div className="h-full rounded-full" style={{ width: `${dailyLossPct}%`, background: dailyLossPct >= 100 ? theme.accent.red : theme.accent.orange }} />
+          </div>
+        </div>
+      )}
+
       <div>
         <div className="text-xs font-bold uppercase mb-1" style={{ color: theme.text.muted }}>
           Open Positions ({portfolio.open_count})
@@ -101,6 +118,9 @@ export default function PaperTradingPanel() {
               </div>
               <div className="text-xs" style={{ color: theme.text.faint }}>
                 {o.action} {o.qty} @ ₹{o.entry_price} • {o.entry_time}
+                {(o.sl > 0 || o.target > 0) && (
+                  <> • {o.sl > 0 ? `SL ₹${o.sl}` : ""}{o.sl > 0 && o.target > 0 ? " / " : ""}{o.target > 0 ? `Target ₹${o.target}` : ""}</>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2">
