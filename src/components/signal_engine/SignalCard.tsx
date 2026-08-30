@@ -15,9 +15,11 @@ export interface Signal {
 interface SignalCardProps {
   signal: Signal;
   onViewChart?: (symbol: string) => void;
+  /** Optional — when provided, shows a "Paper Trade" button (hidden for HOLD signals). */
+  onPaperTrade?: (signal: Signal) => void;
 }
 
-export const SignalCard: React.FC<SignalCardProps> = ({ signal, onViewChart }) => {
+export const SignalCard: React.FC<SignalCardProps> = ({ signal, onViewChart, onPaperTrade }) => {
   const theme = useTheme();
   const colors: Record<SignalType, string> = {
     BUY : theme.accent.green,
@@ -49,20 +51,29 @@ export const SignalCard: React.FC<SignalCardProps> = ({ signal, onViewChart }) =
         <span className="text-xs" style={{ color: theme.text.faint }}>
           {new Date(signal.timestamp).toLocaleString()}
         </span>
-        {onViewChart && (
-          <button className="text-xs font-bold" style={{ color: theme.accent.cyan }}
-            onClick={() => onViewChart(signal.symbol)}>
-            View Chart →
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {onPaperTrade && signal.signal !== 'HOLD' && (
+            <button className="text-xs font-bold" style={{ color }}
+              onClick={() => onPaperTrade(signal)}>
+              📝 Paper Trade
+            </button>
+          )}
+          {onViewChart && (
+            <button className="text-xs font-bold" style={{ color: theme.accent.cyan }}
+              onClick={() => onViewChart(signal.symbol)}>
+              View Chart →
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
 };
 
-export const SignalList: React.FC<{ signals: Signal[]; onViewChart?: (s: string) => void }> = ({
+export const SignalList: React.FC<{ signals: Signal[]; onViewChart?: (s: string) => void; onPaperTrade?: (signal: Signal) => void }> = ({
   signals,
   onViewChart,
+  onPaperTrade,
 }) => {
   const theme = useTheme();
   return (
@@ -73,7 +84,7 @@ export const SignalList: React.FC<{ signals: Signal[]; onViewChart?: (s: string)
         </p>
       )}
       {signals.map((s) => (
-        <SignalCard key={`${s.symbol}-${s.timestamp}`} signal={s} onViewChart={onViewChart} />
+        <SignalCard key={`${s.symbol}-${s.timestamp}`} signal={s} onViewChart={onViewChart} onPaperTrade={onPaperTrade} />
       ))}
     </div>
   );
