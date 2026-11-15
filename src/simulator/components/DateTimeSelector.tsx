@@ -22,6 +22,12 @@
  * curated macro event (RBI/Budget/Results, from EVENT_CALENDAR). This is
  * purely additive to the existing grid — layout, sizing, and every other
  * interaction are unchanged.
+ *
+ * ── Size pass ───────────────────────────────────────────────────
+ * The date display is now rendered at 80% of its previous size: the
+ * expanded picker is 80% of the available width and centered (day cells
+ * are aspect-square, so they shrink with it), and the date/time label on
+ * the main button uses an 11px font instead of 14px. No behavior changes.
  */
 import { useState, useMemo } from "react";
 import { Calendar, ChevronLeft, ChevronRight, SkipBack, SkipForward } from "lucide-react";
@@ -110,7 +116,7 @@ export default function DateTimeSelector({ chain }: Props) {
 
         <button onClick={() => setOpen(v => !v)}
           className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-sm font-bold min-w-0"
-          style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.accent.cyan }}>
+          style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.accent.cyan, fontSize: 11 }}>
           <Calendar size={13} className="shrink-0" />
           <span className="truncate">{currentLabel}</span>
         </button>
@@ -126,8 +132,8 @@ export default function DateTimeSelector({ chain }: Props) {
       </div>
 
       {open && (
-        <div className="absolute z-40 mt-1 left-0 right-0 rounded-xl overflow-hidden shadow-2xl p-3"
-          style={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}` }}>
+        <div className="absolute z-40 left-0 right-0 rounded-xl overflow-hidden shadow-2xl p-3"
+          style={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}`, width: "80%", margin: "4px auto 0" }}>
 
           {/* Years */}
           <div className="flex gap-1 overflow-x-auto pb-2">
