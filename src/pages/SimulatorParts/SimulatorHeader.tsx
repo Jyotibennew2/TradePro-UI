@@ -5,6 +5,7 @@ import type { BuiltStrategy } from "../../simulator/models/Strategy";
 import type { HistoricalChain } from "../../simulator/hooks/useHistoricalChain";
 import { strategyStorage } from "../../simulator/services/strategyStorage";
 import { BookmarkControl, CompareToggle } from "../../simulator/components/SnapshotTools";
+import DateTimeSelector from "../../simulator/components/DateTimeSelector";
 
 interface Props {
   theme: Theme;
@@ -52,6 +53,13 @@ export default function SimulatorHeader({
         <CompareToggle chain={chain} />
         <div className="text-sm" style={{ color: theme.text.muted }}>
           <div>Strategy: {bornAt.toLocaleDateString("en-IN")} {bornAt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</div>
+        </div>
+        {/* Replay date/time selector — sits between "Strategy:" and
+            "Deploy:". Drives the same shared `chain` state the Option
+            Chain panel reads, so moving it here doesn't change what the
+            panel shows. Renders nothing until archived data exists. */}
+        <div className="shrink-0">
+          <DateTimeSelector chain={chain} />
         </div>
         <div className="text-sm" style={{ color: theme.text.muted }}>
           <div>Deploy: {deployLabel}</div>
