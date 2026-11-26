@@ -22,8 +22,19 @@
  * curated macro event (RBI/Budget/Results, from EVENT_CALENDAR). This is
  * purely additive to the existing grid — layout, sizing, and every other
  * interaction are unchanged.
+ *
+ * ── Size / placement pass ───────────────────────────────────────
+ * This component now lives in the Simulator header, between the
+ * "Strategy:" and "Deploy:" labels (it used to sit inside the Option
+ * Chain panel). Because the header slot is only as wide as the button
+ * row, the expanded picker can no longer size itself off its parent: it
+ * is positioned `fixed`, centered horizontally, just below the button
+ * row (top is measured from the button row when the picker opens), and
+ * sized relative to the viewport — 35vw wide. Calendar day cells are
+ * aspect-square so they shrink with it. The date/time label uses a 7px
+ * font. No behavior changes.
  */
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { Calendar, ChevronLeft, ChevronRight, SkipBack, SkipForward } from "lucide-react";
 import { useTheme } from "../../store/themeStore";
 import { TIMEFRAMES, getEventForDate } from "../hooks/useHistoricalChain";
@@ -39,6 +50,18 @@ interface Props {
 export default function DateTimeSelector({ chain }: Props) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [popTop, setPopTop] = useState(0);
+
+  // Measure where the button row ends each time the picker opens, so the
+  // fixed-position popup always lands right under it wherever the header
+  // wraps to on the current screen size.
+  const togglePicker = () => {
+    if (!open && wrapRef.current) {
+      setPopTop(wrapRef.current.getBoundingClientRect().bottom + 4);
+    }
+    setOpen(v => !v);
+  };
 
   const dateSet = useMemo(() => new Set(chain.dates), [chain.dates]);
   const parsed = useMemo(
@@ -97,7 +120,7 @@ export default function DateTimeSelector({ chain }: Props) {
   if (!chain.hasData) return null;
 
   return (
-    <div className="relative">
+    <div className="relative" ref={wrapRef}>
       <div className="flex items-center gap-1">
         <button onClick={() => chain.jump(candleTf, -1)} title="Previous candle"
           className="p-1.5 rounded-lg shrink-0" style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.text.secondary }}>
@@ -108,11 +131,11 @@ export default function DateTimeSelector({ chain }: Props) {
           <SkipBack size={13} />
         </button>
 
-        <button onClick={() => setOpen(v => !v)}
-          className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-sm font-bold min-w-0"
-          style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.accent.cyan }}>
+        <button onClick={togglePicker}
+          className="flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-sm font-bold min-w-0 whitespace-nowrap"
+          style={{ background: theme.bg.surface, border: `1px solid ${theme.border.subtle}`, color: theme.accent.cyan, fontSize: 7 }}>
           <Calendar size={13} className="shrink-0" />
-          <span className="truncate">{currentLabel}</span>
+          <span>{currentLabel}</span>
         </button>
 
         <button onClick={() => chain.jump(dayTf, 1)} title="Next trading day"
@@ -126,8 +149,12 @@ export default function DateTimeSelector({ chain }: Props) {
       </div>
 
       {open && (
-        <div className="absolute z-40 mt-1 left-0 right-0 rounded-xl overflow-hidden shadow-2xl p-3"
-          style={{ background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}` }}>
+        <div className="rounded-xl overflow-hidden shadow-2xl p-3"
+          style={{
+            background: theme.bg.surfaceAlt, border: `1px solid ${theme.border.subtle}`,
+            position: "fixed", top: popTop, left: "50%", transform: "translateX(-50%)",
+            width: "35vw", maxHeight: `calc(100vh - ${popTop + 8}px)`, overflowY: "auto", zIndex: 50,
+          }}>
 
           {/* Years */}
           <div className="flex gap-1 overflow-x-auto pb-2">
