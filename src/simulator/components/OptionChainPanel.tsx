@@ -1,5 +1,10 @@
 /**
  * TradePro Simulator - Option Chain panel (left workspace column, Section A)
+ *
+ * The date/time selector no longer lives here — it moved to the Simulator
+ * header, between the "Strategy:" and "Deploy:" labels (see
+ * SimulatorHeader.tsx). It reads/writes the same shared `chain` state, so
+ * this panel still reacts to every date/time change exactly as before.
  */
 import { useTheme } from "../../store/themeStore";
 import { useChainColumnsStore, CHAIN_COLUMN_LABELS } from "../../store/chainColumnsStore";
@@ -9,7 +14,6 @@ import ErrorBox from "../../components/ui/ErrorBox";
 import { SYMBOLS, OPTIONAL_COLS, fmt, fmtDateLabel } from "../hooks/useHistoricalChain";
 import type { HistoricalChain } from "../hooks/useHistoricalChain";
 import SearchableSelect from "./SearchableSelect";
-import DateTimeSelector from "./DateTimeSelector";
 
 function dteFor(expiry: string, fromDate: string): number | null {
   if (!fromDate) return null;
@@ -103,8 +107,6 @@ export default function OptionChainPanel({ chain }: { chain: HistoricalChain }) 
             />
           </div>
         )}
-
-        <DateTimeSelector chain={chain} />
 
         {chain.chainData && (
           <div className="grid grid-cols-2 gap-1.5">
